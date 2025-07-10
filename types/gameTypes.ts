@@ -5,12 +5,14 @@ export type Piece = {
     color: string;
 }
 
-export type Cell = {
+export type GridCell = {
     color: SharedValue<string>;
     style: SharedValue<string>;
+    y: SharedValue<number>;
+    blur: SharedValue<number>;
 };
 
-export type CellSkia = {
+export type ActivePieceCell = {
     x: SharedValue<number>;
     y: SharedValue<number>;
     color: SharedValue<string>;

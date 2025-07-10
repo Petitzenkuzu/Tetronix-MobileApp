@@ -21,7 +21,7 @@ export default function Pager({user,leaderboard, handlePageChange}: {user: User,
                     <Profile user={user}/>
                 </View>
                 <View style={{width: '100%', height: '100%'}} key="2">
-                  <Home/>
+                  <Home user={user}/>
                 </View>
                 <View style={{width: '100%', height: '100%'}} key="3">
                   <Leaderboard leaderboard={leaderboard}/>

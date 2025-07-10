@@ -1,4 +1,4 @@
-import { View, Text } from "react-native";
+import { View, Text, StyleSheet, Pressable } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { Image } from "expo-image";
 import { ImageBackground } from "react-native";
@@ -10,6 +10,7 @@ import axios from "axios";
 
 export default function Login() {
   const router = useRouter();
+
   const discovery = {
     authorizationEndpoint: 'https://github.com/login/oauth/authorize',
     tokenEndpoint: 'https://github.com/login/oauth/access_token',
@@ -27,8 +28,13 @@ export default function Login() {
 
 async function login(params: string){
   try {
+    console.log("params",params);
     let response = await axios.get(`${process.env.EXPO_PUBLIC_BACKEND_URL || ""}/auth/github_mobile?${params}`);
     console.log(response.data);
+    if(response.status === 200){
+      router.push("/");
+    }
+
   } 
   catch (error:any) {
       console.log("erreur",error);
@@ -49,13 +55,62 @@ async function login(params: string){
   }, [response]);
 
   return (
-    <ImageBackground source={require("@/assets/images/backGround5.png")} style={{flex:1,justifyContent : "center", alignItems : "center"}}>
-      <SafeAreaView>
-          <Image source={require("@/assets/images/tetronixLogo.png")} style={{width: 200, height: 200}}/>
-          <View>
-            <Button title="Login" onPress={() => promptAsync()}/>
+    <ImageBackground source={require("@/assets/images/backGround5.png")} style={styles.container}>
+      <SafeAreaView style={styles.container}>
+        <View style={styles.logoContainer}>
+          <Image source={require("@/assets/images/logo.png")} style={styles.logo} contentFit="contain"/>
+        </View>
+          <View style={styles.buttonContainer}>
+            <Pressable style={styles.buttonPressable} onPress={() => promptAsync()}>
+                <Text style={styles.buttonText}>LOGIN WITH GITHUB</Text>
+                <Image source={require("@/assets/images/github-mark.png")} style={styles.githubIcon} contentFit="contain"/>
+            </Pressable>
           </View>
       </SafeAreaView>
     </ImageBackground>
   );
 }
+const styles = StyleSheet.create({
+  container: {
+    width: "100%",
+    height: "100%", 
+    justifyContent : "center", 
+    alignItems : "center"
+  },
+  logoContainer: {
+    width: "85%",
+    height: "40%",
+    justifyContent : "center",
+    alignItems : "center"
+  },
+  logo: {
+    width: "100%",
+    height: 100,
+  },
+  buttonContainer: {
+    width: "100%",
+    height: "20%",
+    justifyContent : "center",
+    alignItems : "center",
+  },
+  buttonPressable: {
+    height: 60,
+    borderRadius: 20,
+    justifyContent : "center",
+    alignItems : "center",
+    backgroundColor: "rgba(0, 0, 0, 0.8)",
+    padding: 10,
+    flexDirection: "row",
+    gap: 10
+  },
+  buttonText: {
+    color: "white",
+    fontSize: 20,
+    fontFamily: "Quicksand"
+  },
+  githubIcon: {
+    height: 50,
+    width: 50,
+    tintColor: "white"
+  }
+});

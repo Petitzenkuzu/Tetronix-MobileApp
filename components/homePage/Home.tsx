@@ -1,5 +1,6 @@
 import { View, Text, Image, StyleSheet, Pressable } from 'react-native';
 import { useRouter } from 'expo-router';
+import { User } from '@/types/auth';
 
 const stylesLogo = StyleSheet.create({
     logo: {
@@ -44,14 +45,24 @@ const stylesButton = StyleSheet.create({
         textShadowColor: '#10f8ff',
     }
 })
-export default function Home() {
+export default function Home({ user }: { user: User }) {
     const router = useRouter();
     return (
         <View style={{width: '100%', height: '100%', justifyContent: 'space-between', alignItems: 'center'}}>
             <View style={stylesLogo.logoContainer}>
                 <Image source={require('@/assets/images/logo.png')} style={stylesLogo.logo} />
             </View>
-            <Pressable style={stylesButton.button}  onPress={() => {router.push('/game')}}> 
+            <Pressable style={stylesButton.button}  onPress={() => {
+                router.replace({
+                    pathname: '/batchingGame',
+                    params: { 
+                        userName: user.name,
+                        userBestScore: user.best_score.toString(),
+                        userHighestLevel: user.highest_level.toString(),
+                        userNumberOfGames: user.number_of_games.toString()
+                    }
+                });
+            }}> 
                 <Text style={stylesButton.text} >PLAY !</Text>
             </Pressable>
         </View> 

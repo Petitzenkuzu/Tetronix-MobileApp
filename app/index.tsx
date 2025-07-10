@@ -11,6 +11,7 @@ import { StyleSheet } from "react-native";
 import { useFonts } from "expo-font";
 import * as SplashScreen from "expo-splash-screen";
 import { useCallback } from "react";
+import LoadingPage from "@/components/loadingPage";
 
 SplashScreen.preventAutoHideAsync();
 
@@ -53,7 +54,7 @@ export default function Index() {
     }, [fontsLoaded, error]);
 
   // fetch un user et le leaderboard
-  const fetchUser = useCallback(async () => {
+  const fetchInfo = useCallback(async () => {
     try {
       const api = await useApi();
       const response = await api.get(`/services/user`);
@@ -71,17 +72,17 @@ export default function Index() {
 
   useEffect(() => {
     if (isReady) {
-      fetchUser();
+      fetchInfo();
     }
-  }, [isReady, fetchUser]);
+  }, [isReady, fetchInfo]);
 
   // re fetch un user si y'en a pas en revenant sur la page d'accueil
   useFocusEffect(
     useCallback(() => {
-      if (isReady && !user) {
-        fetchUser();
+      if (isReady) {
+        fetchInfo();
       }
-    }, [isReady, user, fetchUser])
+    }, [isReady, fetchInfo])
   );
 
   const styles = StyleSheet.create({
@@ -93,40 +94,24 @@ export default function Index() {
     }
   })
   return (
-    <ImageBackground source={require("@/assets/images/backGround5.png")} style={styles.image} blurRadius={3}>
-      <SafeAreaView style={{height:'100%', width:'100%', justifyContent: "center", alignItems: "center"}}> 
-        {
-          user ? (
-            <View style={{width:'100%', height:'100%', justifyContent: "center", alignItems: "center"}}>
-              <View style={{height:'15%', width:'100%'}}>
-                <BandeauUtilisateur user={user} handleLogout={handleLogout}/>
+      <ImageBackground source={require("@/assets/images/backGround5.png")} style={styles.image} blurRadius={3}> 
+          {
+            user ? (
+              <SafeAreaView style={{height:'100%', width:'100%', justifyContent: "center", alignItems: "center"}}>
+              <View style={{width:'100%', height:'100%', justifyContent: "center", alignItems: "center"}}>
+                <View style={{height:'15%', width:'100%'}}>
+                  <BandeauUtilisateur user={user} handleLogout={handleLogout}/>
+                </View>
+                <View style={{height:'70%', width:'100%'}}>
+                  <Pager user={user} leaderboard={leaderboard} handlePageChange={handlePageChange} />
+                </View>
+                <NavBar actualPage={actualPage}/>
               </View>
-              <View style={{height:'70%', width:'100%'}}>
-                <Pager user={user} leaderboard={leaderboard} handlePageChange={handlePageChange} />
-              </View>
-              <NavBar actualPage={actualPage}/>
-            </View>
-          ) : (
-            <View>
-            <Text style={{ color: "white"}}>Loading...</Text>
-            </View>
-          )
-        }
-      </SafeAreaView>
-    </ImageBackground>
+              </SafeAreaView>
+            ) : (
+              <LoadingPage />
+            )
+          }
+      </ImageBackground>
   );
 }
-
-const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    justifyContent: "center",
-    alignItems: "center",
-    backgroundColor: "#000",
-  },
-  text: {
-    color: "white",
-    fontSize: 18,
-    fontFamily: "SpaceMono",
-  },
-});

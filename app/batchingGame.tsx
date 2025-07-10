@@ -3,6 +3,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import React ,{ useState, useRef, useCallback, useEffect } from "react";
 import { useSharedValue, useDerivedValue, useAnimatedReaction, runOnJS, useFrameCallback, SharedValue, runOnUI } from 'react-native-reanimated';
 import { GRID_SIZE } from "../Constants/grid";
+import { CELLS_COLOR } from "@/Constants/cellsColor";
 import { deleteCompleteLines, getGhostX, getRandomPiece, isPiecePlaceable, placePiece, rotatePiece,getSetOfRandomPieces, getVoidPiece, placeAndAnimateCellForHardFall, movePieceTo } from "../utils/gameUtils";
 import { DIMENSIONS } from "../Constants/dimensions";
 import { Canvas, RoundedRect, Text, useFont, BlurMask} from "@shopify/react-native-skia";
@@ -129,13 +130,13 @@ export default function Game() {
     for (let i = 0; i < piece.shape.length; i++) {
       for (let j = 0; j < piece.shape[i].length; j++) {
         if (piece.shape[i][j]) {  
-          newGrid[i][j].color.value = piece.color;
+          newGrid[i][j].color.value = CELLS_COLOR[piece.color as keyof typeof CELLS_COLOR];
           newGrid[i][j].opacity.value = 1;
           newGrid[i][j].x.value = y.value*cellSize+gap/2 + j*cellSize;
           newGrid[i][j].y.value = x.value*cellSize+gap/2 + i*cellSize;
         }
         else {
-          newGrid[i][j].color.value = piece.color;
+          newGrid[i][j].color.value = CELLS_COLOR[piece.color as keyof typeof CELLS_COLOR];
           newGrid[i][j].opacity.value = 0;
           newGrid[i][j].x.value = y.value*cellSize+gap/2 + j*cellSize;
           newGrid[i][j].y.value = x.value*cellSize+gap/2 + i*cellSize;
@@ -194,6 +195,7 @@ export default function Game() {
   const gap = 3;
   // delai pour modifiable pour pouvoir gérer facilement des délais ( celui de départ, celui de changement de pièce )
   const delay = useSharedValue(3000);
+  const actionQueue = useSharedValue<("right" | "left" | "rotate" | "hardDrop" | "fall")[]>([]);
   // Grille de jeu avec des sharedValues pour gérer les couleurs si c'est une cellule fill ou stroke
   const grid = useRef<GridCell[][]>(getBlankGrid());
   // Valeurs de la pièce active
@@ -208,14 +210,14 @@ export default function Game() {
   const CellPiece = useRef<ActivePieceCell[][]>(initPiece(piece.value, x, y));
   // Timestamp pour le décompte du temps
   const timestamp = useSharedValue(0);
+  // Timestamp pour empêcher de spammer les hard drop
+  const hardDropTimestamp = useSharedValue(-400);
   // Set de pièces aléatoires (obligatoire car pas de random dans les worklet)
   const setOfRandomPieces = useSharedValue<Piece[]>(getSetOfRandomPieces());
   // Distance de swipe (pour gérer les long swpie lent)
   const swipeDistance = useSharedValue(0);
   // Position initial du x au début d'un swipe
   const previousX = useSharedValue(0);
-  // reset game
-  const reset = useSharedValue<boolean>(false);
   // Game over
   const gameOver = useSharedValue(false);
   const [gameOverVisible, setGameOverVisible] = useState(false);
@@ -231,10 +233,6 @@ export default function Game() {
   const add2Lines = (lines2add : number ) => {
     "worklet";
     lines.value = lines.value + lines2add;
-  };
-  const setReset = (val : boolean) => {
-    "worklet";
-    reset.value = val;
   };
 
   // Calcul des positions initiales des textes pour les centrer dans le canvas
@@ -297,6 +295,9 @@ export default function Game() {
     }
   },[]);
 
+  /**
+   * fonction pour changer la pièce active après un fall bloqué ou un hard drop, permet de mettre fin à la partie si on ne peut pas placer de nouvelle pièce
+   */
   const handleChangingActivePiece = useCallback(() => {
     "worklet";
     x.value = 0;
@@ -315,7 +316,7 @@ export default function Game() {
           CellPiece.current[i][j].x.value = y.value*cellSize+gap/2 + j*cellSize;
           CellPiece.current[i][j].y.value = x.value*cellSize+gap/2 + i*cellSize;
           if (i < newPiece.shape.length && j < newPiece.shape[i].length && newPiece.shape[i][j]) {
-            CellPiece.current[i][j].color.value = newPiece.color;
+            CellPiece.current[i][j].color.value = CELLS_COLOR[newPiece.color as keyof typeof CELLS_COLOR];
             CellPiece.current[i][j].opacity.value = 1;
           } else {
             CellPiece.current[i][j].opacity.value = 0;
@@ -324,6 +325,7 @@ export default function Game() {
       }
     ghostX.value = getGhostX(newPiece, grid.current, x.value, y.value);
     placePiece({...newPiece, color: "white"}, grid.current, ghostX.value, y.value, "stroke");
+    delay.value = 500;
     return;
     } else {
       piece.value = getVoidPiece();
@@ -338,13 +340,16 @@ export default function Game() {
       return;
     }
   },[]);
+  /**
+   * fonction pour réinitialiser le jeu
+   */
   const resetGame = useCallback(() => {
     "worklet";
-    reset.value = false;
     score.value = 0;
     level.value = 1;
     lines.value = 0;
     timestamp.value = 0;
+    hardDropTimestamp.value = -400;
     swipeDistance.value = 0;
     delay.value = 3000;
     x.value = 0;
@@ -364,7 +369,7 @@ export default function Game() {
     for (let j = 0; j < CellPiece.current[i].length; j++) {
     CellPiece.current[i][j].x.value = y.value*cellSize+gap/2 + j*cellSize;
     CellPiece.current[i][j].y.value = x.value*cellSize+gap/2 + i*cellSize;
-    CellPiece.current[i][j].color.value = newPiece.color;
+    CellPiece.current[i][j].color.value = CELLS_COLOR[newPiece.color as keyof typeof CELLS_COLOR];
     if (i < newPiece.shape.length && j < newPiece.shape[i].length && newPiece.shape[i][j]) {
     CellPiece.current[i][j].opacity.value = 1;
     } else {
@@ -383,22 +388,7 @@ export default function Game() {
       if (gameOver.value) {
         return;
       }
-      const newPiece = rotatePiece(piece.value);
-      if (isPiecePlaceable(newPiece, grid.current, x.value, y.value)) {
-        placePiece({...piece.value, color: "gray"}, grid.current, ghostX.value, y.value, "stroke");
-        piece.value = newPiece;
-        for (let i = 0; i < newPiece.shape.length; i++) {
-          for (let j = 0; j < newPiece.shape[i].length; j++) {
-            CellPiece.current[i][j].opacity.value = 0;
-            if (newPiece.shape[i][j]) {
-              CellPiece.current[i][j].color.value = newPiece.color;
-              CellPiece.current[i][j].opacity.value = 1;
-            }
-          }
-        }
-      ghostX.value = getGhostX(piece.value, grid.current, x.value, y.value);
-      placePiece({...piece.value, color: "white"}, grid.current, ghostX.value, y.value, "stroke");
-      }
+      actionQueue.value.push("rotate");
     });
 
     const swipe = Gesture.Pan()
@@ -421,29 +411,13 @@ export default function Game() {
           // déplacement vers la droite
         if (swipeDistance.value > cellSize) {
           swipeDistance.value = 0;
-          if (isPiecePlaceable(piece.value, grid.current, x.value, y.value+1)) {
-            movePieceTo(CellPiece.current, "right", cellSize);
-            // on supprime le ghost
-            placePiece({...piece.value, color: "gray"}, grid.current, ghostX.value, y.value, "stroke");
-            y.value = y.value + 1;
-            // on récupère et place le nouveau ghost
-            ghostX.value = getGhostX(piece.value, grid.current, x.value, y.value);
-            placePiece({...piece.value, color: "white"}, grid.current, ghostX.value, y.value, "stroke");
-          }
+          actionQueue.value.push("right");
           return;
         }
         // déplacement vers la gauche
         if (swipeDistance.value < -cellSize) {
           swipeDistance.value = 0;
-          if (isPiecePlaceable(piece.value, grid.current, x.value, y.value-1)) {
-            movePieceTo(CellPiece.current, "left", cellSize);
-            // on supprime le ghost
-            placePiece({...piece.value, color: "gray"}, grid.current, ghostX.value, y.value, "stroke");
-            y.value = y.value - 1;
-            // on récupère et place le nouveau ghost
-            ghostX.value = getGhostX(piece.value, grid.current, x.value, y.value);
-            placePiece({...piece.value, color: "white"}, grid.current, ghostX.value, y.value, "stroke");
-          }
+          actionQueue.value.push("left");
           return;
         }
         return;
@@ -455,30 +429,20 @@ export default function Game() {
         }
         swipeDistance.value = 0;
         if (event.velocityY > 2500) {
-          const diff = ghostX.value - x.value;
-          if (diff > 0) {
-            add2Score(diff*(level.value*10));
-          }
-          placeAndAnimateCellForHardFall(grid.current, piece.value, x.value, y.value, ghostX.value, cellSize, gap, level.value);
-          handleChangingActivePiece();
+          actionQueue.value.push("hardDrop");
         }
       });
 
   const gameLoop = useFrameCallback((frame) => {
     "worklet";
-    /*if(reset.value) {
-      // reset de tout les variables du jeu pour lancer une nouvelle partie
-      resetGame();
-      return;
-    }*/
     if (gameOver.value) {
       return;
     }
-    console.log(frame.timeSinceFirstFrame)
     // initialisation du jeu
     if (timestamp.value === 0) {
       ghostX.value = getGhostX(piece.value, grid.current, x.value, y.value);
       placePiece({...piece.value, color: "white"}, grid.current, ghostX.value, y.value, "stroke");
+      actionQueue.value = [];
     }
     // logique pour faire descendre la pièce  
     if (frame.timeSinceFirstFrame > timestamp.value + delay.value + 1000*(0.8**level.value)) {
@@ -487,21 +451,121 @@ export default function Game() {
       if (delay.value !== 0) {
         delay.value = 0;
       }
-      // Fall de la pièce
-    if (isPiecePlaceable(piece.value, grid.current, x.value+1, y.value)) {
-      for (let i = 0; i < CellPiece.current.length; i++) {
-        for (let j = 0; j < CellPiece.current[i].length; j++) {
-          CellPiece.current[i][j].y.value = withTiming(CellPiece.current[i][j].y.value + cellSize, {duration: (1000*(0.8**level.value))/5});
+      actionQueue.value.push("fall");
+    }
+    if (actionQueue.value.length > 0) {
+      const actions = actionQueue.value.splice(0);
+      actionQueue.value = [];
+      placePiece({...piece.value, color: "gray"}, grid.current, ghostX.value, y.value, "stroke");
+      for (const action of actions) {
+        switch (action) {
+          case "rotate":
+            const newPiece = rotatePiece(piece.value);
+            if (isPiecePlaceable(newPiece, grid.current, x.value, y.value)) {
+              piece.value = newPiece;
+              for (let i = 0; i < newPiece.shape.length; i++) {
+                for (let j = 0; j < newPiece.shape[i].length; j++) {
+                  if (newPiece.shape[i][j]) {
+                    CellPiece.current[i][j].color.value = CELLS_COLOR[newPiece.color as keyof typeof CELLS_COLOR];
+                    CellPiece.current[i][j].opacity.value = 1;
+                  }
+                  else {
+                    CellPiece.current[i][j].opacity.value = 0;
+                  }
+                }
+              }
+              break;
+            }
+            else if (isPiecePlaceable(newPiece, grid.current, x.value, y.value+1)) {
+              piece.value = newPiece;
+              y.value = y.value + 1;
+              for (let i = 0; i < newPiece.shape.length; i++) {
+                for (let j = 0; j < newPiece.shape[i].length; j++) {
+                  if (newPiece.shape[i][j]) {
+                    CellPiece.current[i][j].color.value = CELLS_COLOR[newPiece.color as keyof typeof CELLS_COLOR];
+                    CellPiece.current[i][j].opacity.value = 1;
+                  }
+                  else {
+                    CellPiece.current[i][j].opacity.value = 0;
+                  }
+                }
+              }
+              movePieceTo(CellPiece.current, "right", cellSize);
+              break;
+            }
+            else if (isPiecePlaceable(newPiece, grid.current, x.value, y.value-1)) {
+              piece.value = newPiece;
+              y.value = y.value - 1;
+              for (let i = 0; i < newPiece.shape.length; i++) {
+                for (let j = 0; j < newPiece.shape[i].length; j++) {
+                  if (newPiece.shape[i][j]) {
+                    CellPiece.current[i][j].color.value = CELLS_COLOR[newPiece.color as keyof typeof CELLS_COLOR];
+                    CellPiece.current[i][j].opacity.value = 1;
+                  }
+                  else {
+                    CellPiece.current[i][j].opacity.value = 0;
+                  }
+                }
+              }
+              movePieceTo(CellPiece.current, "left", cellSize);
+              break;
+            }
+
+
+            break;
+          case "right":
+            if (isPiecePlaceable(piece.value, grid.current, x.value, y.value+1)) {
+              movePieceTo(CellPiece.current, "right", cellSize);
+              y.value = y.value + 1;
+            }
+            break;
+          case "left":
+            if (isPiecePlaceable(piece.value, grid.current, x.value, y.value-1)) {
+              movePieceTo(CellPiece.current, "left", cellSize);
+              y.value = y.value - 1;
+            }
+            break;
+          case "hardDrop":
+            // empêche de spammer les hard drop
+            if (frame.timeSinceFirstFrame < hardDropTimestamp.value + 400) {
+              break;
+            }
+            hardDropTimestamp.value = frame.timeSinceFirstFrame;
+            const diff = ghostX.value - x.value;
+            if (diff > 0) {
+              add2Score(diff*(level.value*10));
+            }
+            placeAndAnimateCellForHardFall(grid.current, piece.value, x.value, y.value, ghostX.value, cellSize, gap, level.value);
+            handleChangingActivePiece();
+            break;
+          case "fall":
+            if (isPiecePlaceable(piece.value, grid.current, x.value+1, y.value)) {
+              for (let i = 0; i < CellPiece.current.length; i++) {
+                for (let j = 0; j < CellPiece.current[i].length; j++) {
+                  CellPiece.current[i][j].y.value = withTiming(CellPiece.current[i][j].y.value + cellSize, {duration: (1000*(0.8**level.value))/5});
+                }
+              }
+              x.value = x.value + 1;
+            }
+            else {
+              // On remplace la pièce
+              placePiece(piece.value, grid.current, x.value, y.value, "fill");
+              handleChangingActivePiece();
+          }
+          break;
+          default:
+            break;
+        }
+        if (gameOver.value) {
+          return;
         }
       }
-      x.value = x.value + 1;
+      ghostX.value = getGhostX(piece.value, grid.current, x.value, y.value);
+      placePiece({...piece.value, color: "white"}, grid.current, ghostX.value, y.value, "stroke");
     }
     else {
-      // On remplace la pièce
-      placePiece(piece.value, grid.current, x.value, y.value, "fill");
-      handleChangingActivePiece();
-  }
-  }
+      return;
+    }
 });
 const startGameLoop = () => {
   gameLoop.setActive(true);
@@ -586,13 +650,12 @@ useEffect(() => {
                   </View>
                   <View style={modalStyle.buttonsView}>
                     <Pressable style={modalStyle.buttonPressableHome} onPress={() => { 
-                      router.push("/");
+                      router.replace("/");
                     }}>
                       <RNText style={{color: "white", fontSize: 20, fontFamily: "Quicksand", textAlign: "center"}}>BACK TO MENU</RNText>
                     </Pressable>
                     <Pressable style={modalStyle.buttonPressableRestart} onPress={() => {
                       runOnUI(() => {
-                        setReset(true);
                         resetGame();
                         runOnJS(startGameLoop)();
                       })();
