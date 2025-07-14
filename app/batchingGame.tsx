@@ -5,12 +5,13 @@ import { useSharedValue, useDerivedValue, useAnimatedReaction, runOnJS, useFrame
 import { GRID_SIZE } from "../Constants/grid";
 import { CELLS_COLOR } from "@/Constants/cellsColor";
 import { deleteCompleteLines, getGhostX, getRandomPiece, isPiecePlaceable, placePiece, rotatePiece,getSetOfRandomPieces, getVoidPiece, placeAndAnimateCellForHardFall, movePieceTo } from "../utils/gameUtils";
+import { useBlankGrid, usePiece } from "@/utils/gameHooks";
 import { DIMENSIONS } from "../Constants/dimensions";
 import { Canvas, RoundedRect, Text, useFont, BlurMask} from "@shopify/react-native-skia";
-import { GridCell, Piece, ActivePieceCell } from '@/types/gameTypes';
+import { GridCell, Piece, ActivePieceCell, Action, Game} from '@/types/gameTypes';
 import { User } from '@/types/auth';
 import { GestureHandlerRootView, Gesture, GestureDetector } from 'react-native-gesture-handler';
-import { withTiming } from 'react-native-reanimated';
+import { withTiming } from "react-native-reanimated";
 import {
   configureReanimatedLogger,
   ReanimatedLogLevel,
@@ -87,7 +88,7 @@ const styles = StyleSheet.create({
   }
 }); 
 
-export default function Game() {
+export default function GamePage() {
   const params = useLocalSearchParams();
   
   // User comme state pour pouvoir le modifier
@@ -97,54 +98,7 @@ export default function Game() {
     highest_level: parseInt(params.userHighestLevel as string),
     number_of_games: parseInt(params.userNumberOfGames as string)
   });
-  /**
-   * fonction pour initialiser la grille de jeu qui va servir à faire les roundedRect
-   * obligatoire ici car on ne peut pas utiliser les hook useSharedValue hors d'un composant jsx
-   */
-  const getBlankGrid = useCallback(() => {
-    return Array(GRID_SIZE.HEIGHT).fill(null).map((row, rowIndex) => 
-      Array(GRID_SIZE.WIDTH).fill(null).map(() => ({
-        color: useSharedValue("gray"), 
-        style: useSharedValue("stroke"),
-        y: useSharedValue(rowIndex*cellSize+gap/2),
-        blur: useSharedValue(0)
-      }))
-    );
-  },[]);
-  
-  /**
-   * fonction pour intialiser les rounded Rect
-   * obligatoire ici car on ne peut pas utiliser les hook useSharedValue hors d'un composant jsx
-   */
-  const initPiece = useCallback((piece: Piece, x: SharedValue<number>, y: SharedValue<number>) => {
-    "worklet";
-    const newGrid = Array(4).fill(null).map(() => 
-      Array(4).fill(null).map(() => ({
-        color: useSharedValue("gray"), 
-        style: useSharedValue("stroke"),
-        x: useSharedValue(0),
-        y: useSharedValue(0),
-        opacity: useSharedValue(0)
-      }))
-    );
-    for (let i = 0; i < piece.shape.length; i++) {
-      for (let j = 0; j < piece.shape[i].length; j++) {
-        if (piece.shape[i][j]) {  
-          newGrid[i][j].color.value = CELLS_COLOR[piece.color as keyof typeof CELLS_COLOR];
-          newGrid[i][j].opacity.value = 1;
-          newGrid[i][j].x.value = y.value*cellSize+gap/2 + j*cellSize;
-          newGrid[i][j].y.value = x.value*cellSize+gap/2 + i*cellSize;
-        }
-        else {
-          newGrid[i][j].color.value = CELLS_COLOR[piece.color as keyof typeof CELLS_COLOR];
-          newGrid[i][j].opacity.value = 0;
-          newGrid[i][j].x.value = y.value*cellSize+gap/2 + j*cellSize;
-          newGrid[i][j].y.value = x.value*cellSize+gap/2 + i*cellSize;
-        }
-      }
-    }
-    return newGrid;
-  },[]);
+
   /**
    * ajoute des pièces choisie aléatoirement dans le set de pièces aléatoires
    * @param size nombre de pièces à ajouter
@@ -195,9 +149,12 @@ export default function Game() {
   const gap = 3;
   // delai pour modifiable pour pouvoir gérer facilement des délais ( celui de départ, celui de changement de pièce )
   const delay = useSharedValue(3000);
+  // Queue d'actions à effectuer
   const actionQueue = useSharedValue<("right" | "left" | "rotate" | "hardDrop" | "fall")[]>([]);
+  // Queue d'actions à effectuer
+  const gameActions = useSharedValue<Action[]>([]);
   // Grille de jeu avec des sharedValues pour gérer les couleurs si c'est une cellule fill ou stroke
-  const grid = useRef<GridCell[][]>(getBlankGrid());
+  const grid = useRef<GridCell[][]>(useBlankGrid(GRID_SIZE, cellSize, gap));
   // Valeurs de la pièce active
   const piece = useSharedValue<Piece>(getRandomPiece());
   // x de la pièce active 
@@ -207,7 +164,7 @@ export default function Game() {
   // x de la pièce fantôme
   const ghostX = useSharedValue(0);
   // Grille de la pièce active
-  const CellPiece = useRef<ActivePieceCell[][]>(initPiece(piece.value, x, y));
+  const CellPiece = useRef<ActivePieceCell[][]>(usePiece(piece.value, x, y, cellSize, gap));
   // Timestamp pour le décompte du temps
   const timestamp = useSharedValue(0);
   // Timestamp pour empêcher de spammer les hard drop
@@ -290,6 +247,19 @@ export default function Game() {
       if (response.status === 200) {
         setUser(response.data);
       }
+      if (user.best_score < score.value) {
+        const game : Game = {
+          game_owner: user.name,
+          game_score: score.value,
+          game_level: level.value,
+          game_lines: lines.value,
+          game_actions: gameActions.value
+        }
+        const response = await api.post("/services/game", game);
+        if (response.status === 200) {
+          console.log("Game saved");
+        }
+      }
     } catch (error) {
       console.error(error);
     }
@@ -335,6 +305,7 @@ export default function Game() {
         }
       }
       gameOver.value = true;
+      gameActions.value.push({action_type: "end", timestamp: 0});
       runOnJS(setGameOverVisible)(true);
       runOnJS(updateUser)();
       return;
@@ -350,6 +321,7 @@ export default function Game() {
     lines.value = 0;
     timestamp.value = 0;
     hardDropTimestamp.value = -400;
+    gameActions.value = [];
     swipeDistance.value = 0;
     delay.value = 3000;
     x.value = 0;
@@ -443,6 +415,9 @@ export default function Game() {
       ghostX.value = getGhostX(piece.value, grid.current, x.value, y.value);
       placePiece({...piece.value, color: "white"}, grid.current, ghostX.value, y.value, "stroke");
       actionQueue.value = [];
+      if (gameActions.value.length === 0) {
+        gameActions.value.push({action_type: "start", piece: piece.value, timestamp: 0});
+      }
     }
     // logique pour faire descendre la pièce  
     if (frame.timeSinceFirstFrame > timestamp.value + delay.value + 1000*(0.8**level.value)) {
@@ -474,6 +449,7 @@ export default function Game() {
                   }
                 }
               }
+              gameActions.value.push({action_type: "rotate", piece: newPiece, timestamp: Math.floor(frame.timeSinceFirstFrame)});
               break;
             }
             else if (isPiecePlaceable(newPiece, grid.current, x.value, y.value+1)) {
@@ -491,6 +467,8 @@ export default function Game() {
                 }
               }
               movePieceTo(CellPiece.current, "right", cellSize);
+              gameActions.value.push({action_type: "right", timestamp: Math.floor(frame.timeSinceFirstFrame)});
+              gameActions.value.push({action_type: "rotate", piece: newPiece, timestamp: Math.floor(frame.timeSinceFirstFrame)});
               break;
             }
             else if (isPiecePlaceable(newPiece, grid.current, x.value, y.value-1)) {
@@ -508,6 +486,8 @@ export default function Game() {
                 }
               }
               movePieceTo(CellPiece.current, "left", cellSize);
+              gameActions.value.push({action_type: "left", timestamp: Math.floor(frame.timeSinceFirstFrame)});
+              gameActions.value.push({action_type: "rotate", piece: newPiece, timestamp: Math.floor(frame.timeSinceFirstFrame)});
               break;
             }
 
@@ -517,12 +497,14 @@ export default function Game() {
             if (isPiecePlaceable(piece.value, grid.current, x.value, y.value+1)) {
               movePieceTo(CellPiece.current, "right", cellSize);
               y.value = y.value + 1;
+              gameActions.value.push({action_type: "right", timestamp: Math.floor(frame.timeSinceFirstFrame)});
             }
             break;
           case "left":
             if (isPiecePlaceable(piece.value, grid.current, x.value, y.value-1)) {
               movePieceTo(CellPiece.current, "left", cellSize);
               y.value = y.value - 1;
+              gameActions.value.push({action_type: "left", timestamp: Math.floor(frame.timeSinceFirstFrame)});
             }
             break;
           case "hardDrop":
@@ -536,7 +518,9 @@ export default function Game() {
               add2Score(diff*(level.value*10));
             }
             placeAndAnimateCellForHardFall(grid.current, piece.value, x.value, y.value, ghostX.value, cellSize, gap, level.value);
+            gameActions.value.push({action_type: "hardDrop", timestamp: Math.floor(frame.timeSinceFirstFrame)});
             handleChangingActivePiece();
+            gameActions.value.push({action_type: "changePiece", piece: piece.value, timestamp: Math.floor(frame.timeSinceFirstFrame)});
             break;
           case "fall":
             if (isPiecePlaceable(piece.value, grid.current, x.value+1, y.value)) {
@@ -546,11 +530,13 @@ export default function Game() {
                 }
               }
               x.value = x.value + 1;
+              gameActions.value.push({action_type: "fall", timestamp: Math.floor(frame.timeSinceFirstFrame)});
             }
             else {
               // On remplace la pièce
               placePiece(piece.value, grid.current, x.value, y.value, "fill");
               handleChangingActivePiece();
+              gameActions.value.push({action_type: "changePiece", piece: piece.value, timestamp: Math.floor(frame.timeSinceFirstFrame)});
           }
           break;
           default:

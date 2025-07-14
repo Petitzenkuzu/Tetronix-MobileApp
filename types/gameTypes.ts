@@ -5,6 +5,26 @@ export type Piece = {
     color: string;
 }
 
+export type Action = {
+    action_type: string;
+    timestamp: number;
+    piece?: Piece;
+}
+
+export type Game = {
+    game_owner: string;
+    game_score: number;
+    game_level: number;
+    game_lines: number;
+    game_actions: Action[];
+}
+
+export type GameStats = {
+    game_score: number;
+    game_level: number;
+    game_lines: number;
+}
+
 export type GridCell = {
     color: SharedValue<string>;
     style: SharedValue<string>;

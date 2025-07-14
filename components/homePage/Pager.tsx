@@ -5,11 +5,12 @@ import Profile from './Profile';
 import Home from './Home';
 import Leaderboard from './LeaderBoard';
 import { User } from '@/types/auth';
+import { GameStats } from '@/types/gameTypes';
 let pagerRefGlobal: React.RefObject<PagerView|null> | null = null;
 export function setPage(page : number) {
   pagerRefGlobal?.current?.setPage(page);
 }
-export default function Pager({user,leaderboard, handlePageChange}: {user: User, leaderboard: User[], handlePageChange: (page: number) => void}) {
+export default function Pager({user,leaderboard, gameStats,handlePageChange}: {user: User, leaderboard: User[], gameStats: GameStats|null, handlePageChange: (page: number) => void}) {
   const pagerRef = useRef<PagerView|null>(null);
 
   pagerRefGlobal = pagerRef;
@@ -18,7 +19,7 @@ export default function Pager({user,leaderboard, handlePageChange}: {user: User,
             handlePageChange(event.nativeEvent.position);
         }}>
                 <View style={{width: '100%', height: '100%'}} key="1">
-                    <Profile user={user}/>
+                    <Profile user={user} gameStats={gameStats}/>
                 </View>
                 <View style={{width: '100%', height: '100%'}} key="2">
                   <Home user={user}/>

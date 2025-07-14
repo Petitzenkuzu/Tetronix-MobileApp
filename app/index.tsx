@@ -12,6 +12,7 @@ import { useFonts } from "expo-font";
 import * as SplashScreen from "expo-splash-screen";
 import { useCallback } from "react";
 import LoadingPage from "@/components/loadingPage";
+import { GameStats } from "@/types/gameTypes";
 
 SplashScreen.preventAutoHideAsync();
 
@@ -19,6 +20,7 @@ export default function Index() {
   const router = useRouter();
   const [user, setUser] = useState<User | null>(null);
   const [leaderboard, setLeaderboard] = useState<User[]>([]);
+  const [gameStats, setGameStats] = useState<GameStats | null>(null);
   const [actualPage, setActualPage] = useState<string>("home");
   const [isReady, setIsReady] = useState(false);
   function handlePageChange(page: number) {
@@ -68,6 +70,17 @@ export default function Index() {
         console.error("Erreur lors de la récupération de l'utilisateur:", error);
       }
     }
+    try{
+      const api = await useApi();
+      const response = await api.get(`/services/game_stats`);
+      setGameStats(response.data);
+    } catch (error: any) {
+      if (error.response?.status === 401) {
+        router.push("/login");
+      } else {
+        console.error("Erreur lors de la récupération des stats du jeu:", error);
+      }
+    }
   }, [router]);
 
   useEffect(() => {
@@ -103,7 +116,7 @@ export default function Index() {
                   <BandeauUtilisateur user={user} handleLogout={handleLogout}/>
                 </View>
                 <View style={{height:'70%', width:'100%'}}>
-                  <Pager user={user} leaderboard={leaderboard} handlePageChange={handlePageChange} />
+                  <Pager user={user} leaderboard={leaderboard} gameStats={gameStats} handlePageChange={handlePageChange} />
                 </View>
                 <NavBar actualPage={actualPage}/>
               </View>

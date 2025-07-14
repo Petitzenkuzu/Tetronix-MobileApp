@@ -4,7 +4,7 @@ import { Image } from "expo-image";
 import { ImageBackground } from "react-native";
 import { Button } from "react-native";
 import { useRouter } from "expo-router";
-import { makeRedirectUri,useAuthRequest } from "expo-auth-session";
+import { makeRedirectUri,useAuthRequest,Prompt } from "expo-auth-session";
 import { useEffect } from "react";
 import axios from "axios";
 
@@ -21,6 +21,7 @@ export default function Login() {
     {
       clientId: process.env.EXPO_PUBLIC_GITHUB_CLIENT_ID || "",
       redirectUri: makeRedirectUri({scheme :"tetronix"}),
+      prompt : Prompt.Consent,
       scopes: [],
     },
     discovery
