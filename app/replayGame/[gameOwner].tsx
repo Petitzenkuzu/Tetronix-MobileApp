@@ -19,7 +19,6 @@ import { GridCell, ActivePieceCell } from "@/types/gameTypes";
 
 export default function ReplayGame() {
     const { gameOwner } = useLocalSearchParams();
-    //const [gameOwnerstate, setGameOwnerState] = useState<string>(gameOwner as string);
     const [game, setGame] = useState<Game | null>(null);
 
     const styles = StyleSheet.create({
@@ -160,8 +159,6 @@ export default function ReplayGame() {
               const response = await api.get(`/services/game/${gameOwner}`);
               if (response.status === 200) {
                 setGame(response.data);
-                console.log(response.data.score);
-
               }
           } catch (error) {
               router.back();
@@ -196,7 +193,6 @@ export default function ReplayGame() {
       placePiece({...piece.value, color: "white"}, grid.current, ghostX.value, y.value, "stroke");
       index.value = index.value + 1;
     }
-    console.log("game_actions length",game.game_actions.length," | index",index.value);
     while (index.value < game.game_actions.length && frame.timeSinceFirstFrame > game.game_actions[index.value].timestamp) {
       timestamp.value = game.game_actions[index.value].timestamp;
       placePiece({...piece.value, color: "gray"}, grid.current, ghostX.value, y.value, "stroke");
@@ -206,7 +202,6 @@ export default function ReplayGame() {
           runOnJS(setGameOverVisible)(true);
           return;
         case "fall":
-          console.log("fall");
           x.value = x.value + 1;
           for (let i = 0; i < 4; i++) {
             for (let j = 0; j < 4; j++) {
@@ -217,7 +212,6 @@ export default function ReplayGame() {
         case "hardDrop":
           break;
         case "rotate":
-          console.log("rotate");
           const newPiece = rotatePiece(piece.value);
           piece.value = newPiece;
           for (let i = 0; i < 4; i++) {
@@ -235,12 +229,10 @@ export default function ReplayGame() {
           }
           break;
         case "left":
-          console.log("left");
           movePieceTo(CellPiece.current, "left", cellSize);
           y.value = y.value - 1;
           break;
         case "right":
-          console.log("right");
           movePieceTo(CellPiece.current, "right", cellSize);
           y.value = y.value + 1;
           break;

@@ -64,11 +64,7 @@ export default function Index() {
       const leaderboard = await api.get(`/services/leaderboard`);
       setLeaderboard(leaderboard.data);
     } catch (error: any) {
-      if (error.response?.status === 401) {
-        router.push("/login");
-      } else {
-        console.error("Erreur lors de la récupération de l'utilisateur:", error);
-      }
+      router.push("/login");
     }
     try{
       const api = await useApi();
