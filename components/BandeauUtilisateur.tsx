@@ -37,7 +37,7 @@ export default function BandeauUtilisateur({user, handleLogout}:{user:User, hand
     const stylesUser = StyleSheet.create({
         text: {
             color: "white",
-            fontSize: 25,
+            fontSize: 23,
             fontFamily: "Quicksand",
             textAlign: "center",
             overflow: "hidden",
