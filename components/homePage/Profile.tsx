@@ -192,6 +192,8 @@ function ReplayModal({user, gameStats}: {user: User, gameStats: GameStats|null})
     const [modalVisible, setModalVisible] = useState(false);
     const [notFound, setnotFound] = useState(false);
     const playerName = useRef('');
+
+    // reset notFound après 3 secondes et remets le textInput
     useEffect(() => {
         if (notFound) {
             const timeout = setTimeout(() => {
@@ -202,6 +204,7 @@ function ReplayModal({user, gameStats}: {user: User, gameStats: GameStats|null})
             }
         }
     }, [notFound]);
+    
     return (
         <>
         <Pressable style={styles.replayBodyButton} onPress={() => {

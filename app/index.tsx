@@ -85,15 +85,6 @@ export default function Index() {
     }
   }, [isReady, fetchInfo]);
 
-  // re fetch un user si y'en a pas en revenant sur la page d'accueil
-  useFocusEffect(
-    useCallback(() => {
-      if (isReady) {
-        fetchInfo();
-      }
-    }, [isReady, fetchInfo])
-  );
-
   const styles = StyleSheet.create({
     image: {
       flex: 1,
