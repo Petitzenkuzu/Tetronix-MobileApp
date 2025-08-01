@@ -30,7 +30,7 @@ export default function Login() {
 async function login(params: string){
   try {
     console.log("params",params);
-    let response = await axios.get(`${process.env.EXPO_PUBLIC_BACKEND_URL || ""}/auth/github_mobile?${params}`);
+    let response = await axios.get(`${process.env.EXPO_PUBLIC_BACKEND_URL || ""}/auth/github?${params}`);
     console.log(response.data);
     if(response.status === 200){
       router.push("/");
