@@ -17,7 +17,6 @@ export default function RootLayout() {
       <Stack.Screen name="index" />
       <Stack.Screen name="login" />
       <Stack.Screen name="game" />
-      <Stack.Screen name="batchingGame" />
       <Stack.Screen name="replayGame/[gameOwner]" />
     </Stack>
   );

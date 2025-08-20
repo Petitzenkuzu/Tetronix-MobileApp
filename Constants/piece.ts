@@ -1,57 +1,57 @@
 export const PIECES = {
     I:() => ({
         shape: [
-            [0, 1, 0, 0],
-            [0, 1, 0, 0],
-            [0, 1, 0, 0],
-            [0, 1, 0, 0]
+            [false, true, false, false],
+            [false, true, false, false],
+            [false, true, false, false],
+            [false, true, false, false]
         ],
         color: "cyan"
     }),
     L: () => ({
         shape: [
-            [0, 1, 0],
-            [0, 1, 0],
-            [0, 1, 1]
+            [false, true, false],
+            [false, true, false],
+            [false, true, true]
         ],
         color: "blue"
     }),
     O: () => ({
         shape: [
-            [1, 1],
-            [1, 1]
+            [true, true],
+            [true, true]
         ],
         color: "yellow"
     }),
     J: () => ({
         shape: [
-            [0, 1, 0],
-            [0, 1, 0],
-            [1, 1, 0]
+            [false, true, false],
+            [false, true, false],
+            [true, true, false]
         ],
         color: "orange"
     }),
     T: () => ({
         shape: [
-            [0, 1, 0],
-            [1, 1, 1],
-            [0, 0, 0]
+            [false, true, false],
+            [true, true, true],
+            [false, false, false]
         ],
         color: "purple"
     }),
     Z: () => ({
         shape: [
-            [1, 1, 0],
-            [0, 1, 1],
-            [0, 0, 0]
+            [true, true, false],
+            [false, true, true],
+            [false, false, false]
         ],
         color: "green"
     }),
     S: () => ({
         shape: [
-            [0, 1, 1],
-            [1, 1, 0],
-            [0, 0, 0]
+            [false, true, true],
+            [true, true, false],
+            [false, false, false]
         ],
         color: "red"
     })

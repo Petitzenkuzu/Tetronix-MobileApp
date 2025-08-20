@@ -1,14 +1,37 @@
 import { SharedValue } from "react-native-reanimated";
 
 export type Piece = {
-    shape: number[][];
+    shape: boolean[][];
     color: string;
 }
 
 export type Action = {
-    action_type: string;
+    action_type: ActionType;
     timestamp: number;
-    piece?: Piece;
+    piece: PieceType;
+}
+
+export enum ActionType {
+    start = 0x00,
+    rotate = 0x01,
+    right = 0x02,
+    left = 0x03,
+    fall = 0x04,
+    hardDrop = 0x05,
+    changePiece = 0x06,
+    end = 0x07,
+    ping = 0xFF,
+}
+
+export enum PieceType {
+    cyan = 0x00,
+    blue = 0x01,
+    yellow = 0x02,
+    orange = 0x03,
+    purple = 0x04,
+    green = 0x05,
+    red = 0x06,
+    void = 0x07,
 }
 
 export type Game = {
@@ -18,6 +41,7 @@ export type Game = {
     game_lines: number;
     game_actions: Action[];
 }
+
 
 export type GameStats = {
     game_score: number;

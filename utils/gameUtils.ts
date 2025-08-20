@@ -21,7 +21,7 @@ export const getRandomPiece = () : Piece => {
  */
 export const getVoidPiece = () : Piece => {
   "worklet";
-  return {shape: [[0], [0], [0], [0]], color: "transparent"};
+  return {shape: [[false], [false], [false], [false]], color: "transparent"};
 };
 
 /**
@@ -125,7 +125,7 @@ export const isPiecePlaceable = (piece: Piece, grid: GridCell[][], x: number, y:
  */
 export const getGhostX = (piece: Piece, grid: GridCell[][], x: number, y: number) : number => {
   "worklet";
-  let ghostX = x;
+  let ghostX = x+1;
   while (isPiecePlaceable(piece, grid, ghostX, y)) {
     ghostX++;
   }
@@ -235,4 +235,5 @@ export const deleteCompleteLines = (grid: GridCell[][], scoreManager: scoreManag
   scoreManager.add2Lines(completedLines);
   return;
 }
+
 

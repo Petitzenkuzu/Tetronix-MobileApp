@@ -40,8 +40,7 @@ export default function Index() {
   const handleLogout = async () => {
     setUser(null);
     const api = await useApi();
-    await api.post(`/services/logout`);
-    router.push("/login");
+    api.post(`/auth/logout`).then(() => {router.push("/login");}).catch((error: any) => {router.push("/login");});
   }
 
     const [fontsLoaded,error] = useFonts({
@@ -57,26 +56,16 @@ export default function Index() {
 
   // fetch un user et le leaderboard
   const fetchInfo = useCallback(async () => {
-    try {
       const api = await useApi();
-      const response = await api.get(`/services/user`);
-      setUser(response.data);
-      const leaderboard = await api.get(`/services/leaderboard`);
-      setLeaderboard(leaderboard.data);
-    } catch (error: any) {
-      router.push("/login");
-    }
-    try{
-      const api = await useApi();
-      const response = await api.get(`/services/game_stats`);
-      setGameStats(response.data);
-    } catch (error: any) {
-      if (error.response?.status === 401) {
-        router.push("/login");
-      } else {
-        console.error("Erreur lors de la récupération des stats du jeu:", error);
-      }
-    }
+      api.get(`/user`).then((response: {data: User}) => {
+        setUser(response.data);
+      }).catch((error: any) => {router.push("/login");});
+      api.get(`/leaderboard`).then((response: {data: User[]}) => {
+        setLeaderboard(response.data);
+      }).catch((error: any) => {router.push("/login");});
+      api.get(`/game/stats`).then((response: {data: GameStats}) => {
+        setGameStats(response.data);
+      });
   }, [router]);
 
   useEffect(() => {

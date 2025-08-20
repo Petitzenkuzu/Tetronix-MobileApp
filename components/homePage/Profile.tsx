@@ -113,7 +113,7 @@ export default function Profile({user, gameStats}: {user: User, gameStats: GameS
 async function getGameStats(name: string) {
     try {
         const api = await useApi();
-        const response = await api.get(`/services/game_stats/${name}`);
+        const response = await api.get(`/game/stats/${name}`);
         return response.data;
     } catch (error) {
         return null;

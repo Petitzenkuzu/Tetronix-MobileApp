@@ -29,16 +29,14 @@ export default function Login() {
 
 async function login(params: string){
   try {
-    console.log("params",params);
     let response = await axios.get(`${process.env.EXPO_PUBLIC_BACKEND_URL || ""}/auth/github?${params}`);
-    console.log(response.data);
     if(response.status === 200){
       router.push("/");
     }
 
   } 
   catch (error:any) {
-      console.log("erreur",error);
+    // should not happen, if it does the user will retry to login
   }
   
 }

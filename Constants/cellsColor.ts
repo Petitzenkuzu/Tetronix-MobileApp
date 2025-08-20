@@ -9,4 +9,6 @@ export const CELLS_COLOR = {
     "white": "#FFFFFF",
     "gray": "#808080",
     "black": "#000000",
+    "pink": "#FFC0CB",
+    "brown": "#A52A2A",
 }

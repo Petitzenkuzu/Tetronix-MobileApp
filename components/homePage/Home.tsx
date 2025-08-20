@@ -54,7 +54,7 @@ export default function Home({ user }: { user: User }) {
             </View>
             <Pressable style={stylesButton.button}  onPress={() => {
                 router.replace({
-                    pathname: `/batchingGame`,
+                    pathname: `/game`,
                     params: { 
                         userName: user.name,
                         userBestScore: user.best_score.toString(),

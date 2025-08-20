@@ -3,20 +3,21 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import React ,{ useState, useRef, useCallback, useEffect } from "react";
 import { useSharedValue, useDerivedValue, useAnimatedReaction, runOnJS, useFrameCallback, SharedValue, runOnUI } from 'react-native-reanimated';
 import { GRID_SIZE } from "../Constants/grid";
+import { CELLS_COLOR } from "@/Constants/cellsColor";
 import { deleteCompleteLines, getGhostX, getRandomPiece, isPiecePlaceable, placePiece, rotatePiece,getSetOfRandomPieces, getVoidPiece, placeAndAnimateCellForHardFall, movePieceTo } from "../utils/gameUtils";
+import { useBlankGrid, usePiece, useScore } from "@/utils/gameHooks";
 import { DIMENSIONS } from "../Constants/dimensions";
 import { Canvas, RoundedRect, Text, useFont, BlurMask} from "@shopify/react-native-skia";
-import { GridCell, Piece, ActivePieceCell } from '@/types/gameTypes';
+import { GridCell, Piece, ActivePieceCell, Action, Game, ActionType, PieceType} from '@/types/gameTypes';
 import { User } from '@/types/auth';
 import { GestureHandlerRootView, Gesture, GestureDetector } from 'react-native-gesture-handler';
-import { withTiming } from 'react-native-reanimated';
+import { withTiming } from "react-native-reanimated";
 import {
   configureReanimatedLogger,
   ReanimatedLogLevel,
 } from 'react-native-reanimated';
 import { router, useLocalSearchParams } from 'expo-router';
-import { useApi } from '@/hooks/useApi';
-
+import { useTimer } from '@/hooks/useTimer';
 configureReanimatedLogger({
   level: ReanimatedLogLevel.warn,
   strict: false,
@@ -86,7 +87,7 @@ const styles = StyleSheet.create({
   }
 }); 
 
-export default function Game() {
+export default function GamePage() {
   const params = useLocalSearchParams();
   
   // User comme state pour pouvoir le modifier
@@ -96,54 +97,7 @@ export default function Game() {
     highest_level: parseInt(params.userHighestLevel as string),
     number_of_games: parseInt(params.userNumberOfGames as string)
   });
-  /**
-   * fonction pour initialiser la grille de jeu qui va servir à faire les roundedRect
-   * obligatoire ici car on ne peut pas utiliser les hook useSharedValue hors d'un composant jsx
-   */
-  const getBlankGrid = useCallback(() => {
-    return Array(GRID_SIZE.HEIGHT).fill(null).map((row, rowIndex) => 
-      Array(GRID_SIZE.WIDTH).fill(null).map(() => ({
-        color: useSharedValue("gray"), 
-        style: useSharedValue("stroke"),
-        y: useSharedValue(rowIndex*cellSize+gap/2),
-        blur: useSharedValue(0)
-      }))
-    );
-  },[]);
-  
-  /**
-   * fonction pour intialiser les rounded Rect
-   * obligatoire ici car on ne peut pas utiliser les hook useSharedValue hors d'un composant jsx
-   */
-  const initPiece = useCallback((piece: Piece, x: SharedValue<number>, y: SharedValue<number>) => {
-    "worklet";
-    const newGrid = Array(4).fill(null).map(() => 
-      Array(4).fill(null).map(() => ({
-        color: useSharedValue("gray"), 
-        style: useSharedValue("stroke"),
-        x: useSharedValue(0),
-        y: useSharedValue(0),
-        opacity: useSharedValue(0)
-      }))
-    );
-    for (let i = 0; i < piece.shape.length; i++) {
-      for (let j = 0; j < piece.shape[i].length; j++) {
-        if (piece.shape[i][j]) {  
-          newGrid[i][j].color.value = piece.color;
-          newGrid[i][j].opacity.value = 1;
-          newGrid[i][j].x.value = y.value*cellSize+gap/2 + j*cellSize;
-          newGrid[i][j].y.value = x.value*cellSize+gap/2 + i*cellSize;
-        }
-        else {
-          newGrid[i][j].color.value = piece.color;
-          newGrid[i][j].opacity.value = 0;
-          newGrid[i][j].x.value = y.value*cellSize+gap/2 + j*cellSize;
-          newGrid[i][j].y.value = x.value*cellSize+gap/2 + i*cellSize;
-        }
-      }
-    }
-    return newGrid;
-  },[]);
+
   /**
    * ajoute des pièces choisie aléatoirement dans le set de pièces aléatoires
    * @param size nombre de pièces à ajouter
@@ -156,46 +110,20 @@ export default function Game() {
     setOfRandomPieces.value = newSetOfRandomPieces;
   },[]);
 
-  
-  const fontSize = 28;
-  const font = useFont(require("@/assets/fonts/Quicksand-Light.ttf"), fontSize);
-  // stats du jeu
-  const score = useSharedValue<number>(0);
-  const level = useSharedValue<number>(1);
-  const lines = useSharedValue<number>(0);
-  
-  // Valeur de décalage X des textes statiques pour les centrer dans le canvas
-  const xLevel = useSharedValue<number>(0);
-  const xScore = useSharedValue<number>(0);
-  const xLines = useSharedValue<number>(0);
-  
-  // Valeur de décalage X des textes dynamiques pour les centrer dans le canvas
-  const xValueLevel = useSharedValue<number>(0);
-  const xValueScore = useSharedValue<number>(0);
-  const xValueLines = useSharedValue<number>(0);
+  const {fontSize, font, score, level, lines, xLevel, xScore, xLines, xValueLevel, xValueScore, xValueLines, levelText, scoreText, linesText, add2Score, add2Level, add2Lines} = useScore();
 
-  // DerivedValues pour que les textes réagissent au changement de la valeur des stats
-  const levelText = useDerivedValue<string>(() : string => {
-    "worklet";
-    return level.value.toString();
-  });
-  const scoreText = useDerivedValue<string>(() : string => {
-    "worklet";
-    return score.value.toString();
-  });
-  const linesText = useDerivedValue<string>(() : string => {
-    "worklet";
-    return lines.value.toString();
-  });
-  
+  const {timer, xTimer, yTimer, opacity, timerFont} = useTimer();
+
   // Valeurs de la longueur d'une cellule
   const cellSize = DIMENSIONS.WIDTH * 0.8 * 0.98 / 10;
   // gap entre deux cellules
   const gap = 3;
   // delai pour modifiable pour pouvoir gérer facilement des délais ( celui de départ, celui de changement de pièce )
   const delay = useSharedValue(3000);
+  // Queue d'actions à effectuer
+  const actionQueue = useSharedValue<ActionType[]>([]);
   // Grille de jeu avec des sharedValues pour gérer les couleurs si c'est une cellule fill ou stroke
-  const grid = useRef<GridCell[][]>(getBlankGrid());
+  const grid = useRef<GridCell[][]>(useBlankGrid(GRID_SIZE, cellSize, gap));
   // Valeurs de la pièce active
   const piece = useSharedValue<Piece>(getRandomPiece());
   // x de la pièce active 
@@ -205,38 +133,25 @@ export default function Game() {
   // x de la pièce fantôme
   const ghostX = useSharedValue(0);
   // Grille de la pièce active
-  const CellPiece = useRef<ActivePieceCell[][]>(initPiece(piece.value, x, y));
+  const CellPiece = useRef<ActivePieceCell[][]>(usePiece(piece.value, x, y, cellSize, gap));
   // Timestamp pour le décompte du temps
   const timestamp = useSharedValue(0);
+  // Timestamp pour empêcher de spammer les hard drop
+  const hardDropTimestamp = useSharedValue(-400);
   // Set de pièces aléatoires (obligatoire car pas de random dans les worklet)
   const setOfRandomPieces = useSharedValue<Piece[]>(getSetOfRandomPieces());
   // Distance de swipe (pour gérer les long swpie lent)
   const swipeDistance = useSharedValue(0);
   // Position initial du x au début d'un swipe
   const previousX = useSharedValue(0);
-  // reset game
-  const reset = useSharedValue<boolean>(false);
   // Game over
   const gameOver = useSharedValue(false);
+  // Game started
+  const gameStarted = useSharedValue(false);
+  // Game over visible pour gérer le modal
   const [gameOverVisible, setGameOverVisible] = useState(false);
-
-  const add2Score = (score2add : number ) => {
-    "worklet";
-    score.value = score.value + score2add;
-  };
-  const add2Level = (level2add : number ) => {
-    "worklet";
-    level.value = level.value + level2add;
-  };
-  const add2Lines = (lines2add : number ) => {
-    "worklet";
-    lines.value = lines.value + lines2add;
-  };
-  const setReset = (val : boolean) => {
-    "worklet";
-    reset.value = val;
-  };
-
+  // WebSocket pour le streaming serveur
+  const [webSocket, setWebSocket] = useState<WebSocket | null>(null);
   // Calcul des positions initiales des textes pour les centrer dans le canvas
   useEffect(() => {
     if (font) {
@@ -249,54 +164,57 @@ export default function Game() {
     }
   },[font]);
 
-  // Recalculer les positions des sharedValues quand elles changent 
-  // permet de garder centrer les textes dans les canvas pour éviter d'utiliser un useState pour les textes et rerender tous les cubes
-  useAnimatedReaction(
-    () => {
-      return {
-        levelText: level.value.toString(),
-        scoreText: score.value.toString(),
-        linesText: lines.value.toString(),
-        fontReady: font !== null
-      };
-    },
-    (current) => {
-      if (current.fontReady && font) {
-        xValueLevel.value = (DIMENSIONS.WIDTH - font.measureText(current.levelText).width)/2;
-        xValueScore.value = (DIMENSIONS.WIDTH/2 - font.measureText(current.scoreText).width)/2;
-        xValueLines.value = (DIMENSIONS.WIDTH/2 - font.measureText(current.linesText).width)/2;
-      }
-    }
-  );
   /**
-   * fonction pour mettre à jour les stats de l'utilisateur
-   * appelée lorsqu'une partie est terminé
+   * Gestion du websocket
    */
-  const updateUser = useCallback(async() => {
-    let tempScore = user.best_score;
-    let tempLevel = user.highest_level;
-    if (user.best_score < score.value) {
-      tempScore = score.value;
+  useEffect(() => {
+    if (webSocket) {
+      startGameLoop();
+      return;
     }
-    if (user.highest_level < level.value) {
-      tempLevel = level.value;
+    stopGameLoop();
+    let url = `${process.env.EXPO_PUBLIC_BACKEND_URL_WEBSOCKET}/game/start`;
+    const ws = new WebSocket(url);
+    ws.onopen = () => {
     }
-    try{
-      const api = await useApi();
-      const response = await api.post(`/services/user`, {
-        name: user.name,
-        best_score: tempScore,
-        highest_level: tempLevel,
-        number_of_games: user.number_of_games + 1
-      });
-      if (response.status === 200) {
-        setUser(response.data);
-      }
-    } catch (error) {
-      console.error(error);
-    }
-  },[]);
+    ws.onmessage = (event) => {
 
+    }
+    ws.onclose = (event) => {
+      switch (event.code) {
+        case 1000:
+          break;
+        case 1011: 
+          router.replace("/");
+          break;
+        case 1007:
+          router.replace("/");
+          break;
+        case 1008:
+          router.replace("/login");
+          break;
+        default:
+          break;
+      }
+    }
+    ws.onerror = (error) => {
+      router.replace("/");
+    }
+    setWebSocket(ws);
+  },[webSocket]);
+
+  /**
+   * Gestion du game over
+   */
+  useEffect(() => {
+    if (gameOverVisible == true) {
+      stopGameLoop();
+    }
+  },[gameOverVisible]);
+
+  /**
+   * fonction pour changer la pièce active après un fall bloqué ou un hard drop, permet de mettre fin à la partie si on ne peut pas placer de nouvelle pièce
+   */
   const handleChangingActivePiece = useCallback(() => {
     "worklet";
     x.value = 0;
@@ -315,7 +233,7 @@ export default function Game() {
           CellPiece.current[i][j].x.value = y.value*cellSize+gap/2 + j*cellSize;
           CellPiece.current[i][j].y.value = x.value*cellSize+gap/2 + i*cellSize;
           if (i < newPiece.shape.length && j < newPiece.shape[i].length && newPiece.shape[i][j]) {
-            CellPiece.current[i][j].color.value = newPiece.color;
+            CellPiece.current[i][j].color.value = CELLS_COLOR[newPiece.color as keyof typeof CELLS_COLOR];
             CellPiece.current[i][j].opacity.value = 1;
           } else {
             CellPiece.current[i][j].opacity.value = 0;
@@ -324,6 +242,7 @@ export default function Game() {
       }
     ghostX.value = getGhostX(newPiece, grid.current, x.value, y.value);
     placePiece({...newPiece, color: "white"}, grid.current, ghostX.value, y.value, "stroke");
+    delay.value = 500;
     return;
     } else {
       piece.value = getVoidPiece();
@@ -333,20 +252,24 @@ export default function Game() {
         }
       }
       gameOver.value = true;
+      runOnJS(sendActionOnWebSocket)({action_type: ActionType.end, piece : PieceType.void ,timestamp: Math.floor(timestamp.value)});
       runOnJS(setGameOverVisible)(true);
-      runOnJS(updateUser)();
       return;
     }
-  },[]);
+  },[webSocket]);
+  /**
+   * fonction pour réinitialiser le jeu
+   */
   const resetGame = useCallback(() => {
     "worklet";
-    reset.value = false;
     score.value = 0;
     level.value = 1;
     lines.value = 0;
     timestamp.value = 0;
+    hardDropTimestamp.value = -400;
     swipeDistance.value = 0;
     delay.value = 3000;
+    gameStarted.value = false;
     x.value = 0;
     y.value = 4; 
     for (let i = 0; i < grid.current.length; i++) {
@@ -364,7 +287,7 @@ export default function Game() {
     for (let j = 0; j < CellPiece.current[i].length; j++) {
     CellPiece.current[i][j].x.value = y.value*cellSize+gap/2 + j*cellSize;
     CellPiece.current[i][j].y.value = x.value*cellSize+gap/2 + i*cellSize;
-    CellPiece.current[i][j].color.value = newPiece.color;
+    CellPiece.current[i][j].color.value = CELLS_COLOR[newPiece.color as keyof typeof CELLS_COLOR];
     if (i < newPiece.shape.length && j < newPiece.shape[i].length && newPiece.shape[i][j]) {
     CellPiece.current[i][j].opacity.value = 1;
     } else {
@@ -373,8 +296,25 @@ export default function Game() {
     }
     }
     gameOver.value = false;
+    runOnJS(setWebSocket)(null);
     runOnJS(setGameOverVisible)(false);
   },[]);
+
+  /**
+  * Envoie une action sur le websocket, si l'action est un end, on ferme le websocket et on empêche l'envoie du changePiece en trop
+  * @param action l'action à envoyer
+  */        
+  function sendActionOnWebSocket(action: Action) {
+    if (webSocket && webSocket.readyState === WebSocket.OPEN) {
+
+      const buffer = new ArrayBuffer(10);
+      const view = new DataView(buffer);
+      view.setUint8(0, action.action_type);
+      view.setUint8(1, action.piece);
+      view.setBigInt64(2, BigInt(action.timestamp));
+      webSocket.send(buffer);
+    }
+  };
 
   const singleTap = Gesture.Tap()
     .maxDuration(250)
@@ -383,22 +323,7 @@ export default function Game() {
       if (gameOver.value) {
         return;
       }
-      const newPiece = rotatePiece(piece.value);
-      if (isPiecePlaceable(newPiece, grid.current, x.value, y.value)) {
-        placePiece({...piece.value, color: "gray"}, grid.current, ghostX.value, y.value, "stroke");
-        piece.value = newPiece;
-        for (let i = 0; i < newPiece.shape.length; i++) {
-          for (let j = 0; j < newPiece.shape[i].length; j++) {
-            CellPiece.current[i][j].opacity.value = 0;
-            if (newPiece.shape[i][j]) {
-              CellPiece.current[i][j].color.value = newPiece.color;
-              CellPiece.current[i][j].opacity.value = 1;
-            }
-          }
-        }
-      ghostX.value = getGhostX(piece.value, grid.current, x.value, y.value);
-      placePiece({...piece.value, color: "white"}, grid.current, ghostX.value, y.value, "stroke");
-      }
+      actionQueue.value.push(ActionType.rotate);
     });
 
     const swipe = Gesture.Pan()
@@ -421,29 +346,13 @@ export default function Game() {
           // déplacement vers la droite
         if (swipeDistance.value > cellSize) {
           swipeDistance.value = 0;
-          if (isPiecePlaceable(piece.value, grid.current, x.value, y.value+1)) {
-            movePieceTo(CellPiece.current, "right", cellSize);
-            // on supprime le ghost
-            placePiece({...piece.value, color: "gray"}, grid.current, ghostX.value, y.value, "stroke");
-            y.value = y.value + 1;
-            // on récupère et place le nouveau ghost
-            ghostX.value = getGhostX(piece.value, grid.current, x.value, y.value);
-            placePiece({...piece.value, color: "white"}, grid.current, ghostX.value, y.value, "stroke");
-          }
+          actionQueue.value.push(ActionType.right);
           return;
         }
         // déplacement vers la gauche
         if (swipeDistance.value < -cellSize) {
           swipeDistance.value = 0;
-          if (isPiecePlaceable(piece.value, grid.current, x.value, y.value-1)) {
-            movePieceTo(CellPiece.current, "left", cellSize);
-            // on supprime le ghost
-            placePiece({...piece.value, color: "gray"}, grid.current, ghostX.value, y.value, "stroke");
-            y.value = y.value - 1;
-            // on récupère et place le nouveau ghost
-            ghostX.value = getGhostX(piece.value, grid.current, x.value, y.value);
-            placePiece({...piece.value, color: "white"}, grid.current, ghostX.value, y.value, "stroke");
-          }
+          actionQueue.value.push(ActionType.left);
           return;
         }
         return;
@@ -455,65 +364,183 @@ export default function Game() {
         }
         swipeDistance.value = 0;
         if (event.velocityY > 2500) {
-          const diff = ghostX.value - x.value;
-          if (diff > 0) {
-            add2Score(diff*(level.value*10));
-          }
-          placeAndAnimateCellForHardFall(grid.current, piece.value, x.value, y.value, ghostX.value, cellSize, gap, level.value);
-          handleChangingActivePiece();
+          actionQueue.value.push(ActionType.hardDrop);
         }
       });
 
+
   const gameLoop = useFrameCallback((frame) => {
     "worklet";
-    /*if(reset.value) {
-      // reset de tout les variables du jeu pour lancer une nouvelle partie
-      resetGame();
-      return;
-    }*/
     if (gameOver.value) {
       return;
     }
-    console.log(frame.timeSinceFirstFrame)
     // initialisation du jeu
     if (timestamp.value === 0) {
       ghostX.value = getGhostX(piece.value, grid.current, x.value, y.value);
       placePiece({...piece.value, color: "white"}, grid.current, ghostX.value, y.value, "stroke");
+      actionQueue.value = [];
+      if (!gameStarted.value) {
+        runOnJS(sendActionOnWebSocket)({action_type: ActionType.start, piece: PieceType[piece.value.color as keyof typeof PieceType], timestamp: 0});
+        gameStarted.value = true;
+      }
     }
-    // logique pour faire descendre la pièce  
+
+    if (frame.timeSinceFirstFrame <= 4000) {
+      if (frame.timeSinceFirstFrame > 3000) {
+        opacity.value = withTiming(0, {duration: 500});
+      }
+      if (frame.timeSinceFirstFrame > 2000) {
+        timer.value = "1";
+      }
+      else if (frame.timeSinceFirstFrame > 1000) {
+        timer.value = "2";
+      }
+      else {
+        timer.value = "3";
+      }
+    }
+
+    // logique pour déclencher les fall
     if (frame.timeSinceFirstFrame > timestamp.value + delay.value + 1000*(0.8**level.value)) {
       timestamp.value = frame.timeSinceFirstFrame;
       // reset du délai
       if (delay.value !== 0) {
         delay.value = 0;
       }
-      // Fall de la pièce
-    if (isPiecePlaceable(piece.value, grid.current, x.value+1, y.value)) {
-      for (let i = 0; i < CellPiece.current.length; i++) {
-        for (let j = 0; j < CellPiece.current[i].length; j++) {
-          CellPiece.current[i][j].y.value = withTiming(CellPiece.current[i][j].y.value + cellSize, {duration: (1000*(0.8**level.value))/5});
+      actionQueue.value.push(ActionType.fall);
+    }
+    if (actionQueue.value.length > 0) {
+      const actions = actionQueue.value.splice(0);
+      actionQueue.value = [];
+      placePiece({...piece.value, color: "gray"}, grid.current, ghostX.value, y.value, "stroke");
+      for (const action of actions) {
+        switch (action) {
+          case ActionType.rotate:
+            const newPiece = rotatePiece(piece.value);
+            if (isPiecePlaceable(newPiece, grid.current, x.value, y.value)) {
+              piece.value = newPiece;
+              for (let i = 0; i < newPiece.shape.length; i++) {
+                for (let j = 0; j < newPiece.shape[i].length; j++) {
+                  if (newPiece.shape[i][j]) {
+                    CellPiece.current[i][j].color.value = CELLS_COLOR[newPiece.color as keyof typeof CELLS_COLOR];
+                    CellPiece.current[i][j].opacity.value = 1;
+                  }
+                  else {
+                    CellPiece.current[i][j].opacity.value = 0;
+                  }
+                }
+              }
+              runOnJS(sendActionOnWebSocket)({action_type: ActionType.rotate, piece: PieceType[newPiece.color as keyof typeof PieceType], timestamp: Math.floor(frame.timeSinceFirstFrame)});
+              break;
+            }
+            else if (isPiecePlaceable(newPiece, grid.current, x.value, y.value+1)) {
+              piece.value = newPiece;
+              y.value = y.value + 1;
+              for (let i = 0; i < newPiece.shape.length; i++) {
+                for (let j = 0; j < newPiece.shape[i].length; j++) {
+                  if (newPiece.shape[i][j]) {
+                    CellPiece.current[i][j].color.value = CELLS_COLOR[newPiece.color as keyof typeof CELLS_COLOR];
+                    CellPiece.current[i][j].opacity.value = 1;
+                  }
+                  else {
+                    CellPiece.current[i][j].opacity.value = 0;
+                  }
+                }
+              }
+              movePieceTo(CellPiece.current, "right", cellSize);
+              runOnJS(sendActionOnWebSocket)({action_type: ActionType.right, piece : PieceType[newPiece.color as keyof typeof PieceType] ,timestamp: Math.floor(frame.timeSinceFirstFrame)});
+              runOnJS(sendActionOnWebSocket)({action_type: ActionType.rotate, piece: PieceType[newPiece.color as keyof typeof PieceType], timestamp: Math.floor(frame.timeSinceFirstFrame)});
+              break;
+            }
+            else if (isPiecePlaceable(newPiece, grid.current, x.value, y.value-1)) {
+              piece.value = newPiece;
+              y.value = y.value - 1;
+              for (let i = 0; i < newPiece.shape.length; i++) {
+                for (let j = 0; j < newPiece.shape[i].length; j++) {
+                  if (newPiece.shape[i][j]) {
+                    CellPiece.current[i][j].color.value = CELLS_COLOR[newPiece.color as keyof typeof CELLS_COLOR];
+                    CellPiece.current[i][j].opacity.value = 1;
+                  }
+                  else {
+                    CellPiece.current[i][j].opacity.value = 0;
+                  }
+                }
+              }
+              movePieceTo(CellPiece.current, "left", cellSize);
+              runOnJS(sendActionOnWebSocket)({action_type: ActionType.left, piece : PieceType[newPiece.color as keyof typeof PieceType] ,timestamp: Math.floor(frame.timeSinceFirstFrame)});
+              runOnJS(sendActionOnWebSocket)({action_type: ActionType.rotate, piece: PieceType[newPiece.color as keyof typeof PieceType], timestamp: Math.floor(frame.timeSinceFirstFrame)});
+              break;
+            }
+
+
+            break;
+          case ActionType.right:
+            if (isPiecePlaceable(piece.value, grid.current, x.value, y.value+1)) {
+              movePieceTo(CellPiece.current, "right", cellSize);
+              y.value = y.value + 1;
+              runOnJS(sendActionOnWebSocket)({action_type: ActionType.right, piece : PieceType[piece.value.color as keyof typeof PieceType], timestamp: Math.floor(frame.timeSinceFirstFrame)});
+            }
+            break;
+          case ActionType.left:
+            if (isPiecePlaceable(piece.value, grid.current, x.value, y.value-1)) {
+              movePieceTo(CellPiece.current, "left", cellSize);
+              y.value = y.value - 1;
+              runOnJS(sendActionOnWebSocket)({action_type: ActionType.left, piece : PieceType[piece.value.color as keyof typeof PieceType] ,timestamp: Math.floor(frame.timeSinceFirstFrame)});
+            }
+            break;
+          case ActionType.hardDrop:
+            // empêche de spammer les hard drop
+            if (frame.timeSinceFirstFrame < hardDropTimestamp.value + 400) {
+              break;
+            }
+            hardDropTimestamp.value = frame.timeSinceFirstFrame;
+            timestamp.value = frame.timeSinceFirstFrame;
+            const diff = ghostX.value - x.value;
+            if (diff > 0) {
+              add2Score(diff*(level.value*10));
+            }
+            placeAndAnimateCellForHardFall(grid.current, piece.value, x.value, y.value, ghostX.value, cellSize, gap, level.value);
+            runOnJS(sendActionOnWebSocket)({action_type: ActionType.hardDrop, piece : PieceType[piece.value.color as keyof typeof PieceType] ,timestamp: Math.floor(frame.timeSinceFirstFrame)});
+            handleChangingActivePiece();
+            runOnJS(sendActionOnWebSocket)({action_type: ActionType.changePiece, piece: PieceType[piece.value.color as keyof typeof PieceType], timestamp: Math.floor(frame.timeSinceFirstFrame)});
+            break;
+          case ActionType.fall:
+            if (isPiecePlaceable(piece.value, grid.current, x.value+1, y.value)) {
+              for (let i = 0; i < CellPiece.current.length; i++) {
+                for (let j = 0; j < CellPiece.current[i].length; j++) {
+                  CellPiece.current[i][j].y.value = withTiming(CellPiece.current[i][j].y.value + cellSize, {duration: (1000*(0.8**level.value))/5});
+                }
+              }
+              x.value = x.value + 1;
+              runOnJS(sendActionOnWebSocket)({action_type: ActionType.fall, piece : PieceType[piece.value.color as keyof typeof PieceType] ,timestamp: Math.floor(frame.timeSinceFirstFrame)});
+            }
+            else {
+              // On remplace la pièce
+              placePiece(piece.value, grid.current, x.value, y.value, "fill");
+              handleChangingActivePiece();
+              runOnJS(sendActionOnWebSocket)({action_type: ActionType.changePiece, piece: PieceType[piece.value.color as keyof typeof PieceType], timestamp: Math.floor(frame.timeSinceFirstFrame)});
+          }
+          break;
+          default:
+            break;
+        }
+        if (gameOver.value) {
+          return;
         }
       }
-      x.value = x.value + 1;
+      ghostX.value = getGhostX(piece.value, grid.current, x.value, y.value);
+      placePiece({...piece.value, color: "white"}, grid.current, ghostX.value, y.value, "stroke");
     }
     else {
-      // On remplace la pièce
-      placePiece(piece.value, grid.current, x.value, y.value, "fill");
-      handleChangingActivePiece();
-  }
-  }
+      return;
+    }
 });
-const startGameLoop = () => {
+const startGameLoop =() => {
   gameLoop.setActive(true);
 };
 const stopGameLoop = () => {
   gameLoop.setActive(false);
 };
-useEffect(() => {
-  if (gameOver.value) {
-    stopGameLoop();
-  }
-},[gameOverVisible]);
 
   return (
       <ImageBackground source={require("@/assets/images/backGround6.png")} style={styles.background} blurRadius={3}>
@@ -569,6 +596,7 @@ useEffect(() => {
                           style={"fill"}
                           opacity={cell.opacity}   
                         /> ))}
+                        <Text x={xTimer} y={yTimer} text={timer} font={timerFont} color="white" opacity={opacity} />
                   </Canvas>
                 </GestureDetector>
               </View>
@@ -586,15 +614,13 @@ useEffect(() => {
                   </View>
                   <View style={modalStyle.buttonsView}>
                     <Pressable style={modalStyle.buttonPressableHome} onPress={() => { 
-                      router.push("/");
+                      router.replace("/");
                     }}>
                       <RNText style={{color: "white", fontSize: 20, fontFamily: "Quicksand", textAlign: "center"}}>BACK TO MENU</RNText>
                     </Pressable>
                     <Pressable style={modalStyle.buttonPressableRestart} onPress={() => {
                       runOnUI(() => {
-                        setReset(true);
                         resetGame();
-                        runOnJS(startGameLoop)();
                       })();
                     }}>
                       <Image source={require("@/assets/images/restart.png")} style={{height: "50%",width: "15%", tintColor: "white", aspectRatio: 1}} />
@@ -675,4 +701,3 @@ const modalStyle = StyleSheet.create({
     borderRadius: 12,
   }
 });
-

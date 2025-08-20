@@ -1,23 +1,27 @@
 import { View, Text as RNText, ImageBackground, Pressable, Modal, StyleSheet } from "react-native";
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useLocalSearchParams, useRouter } from "expo-router";
-import { Game, Piece, scoreManager } from "@/types/gameTypes";
+import { Piece } from "@/types/gameTypes";
+import { Game } from "@/types/gameTypes";
 import { Image } from "expo-image";
 import { useCallback, useEffect, useState } from "react";
 import { useApi } from "@/hooks/useApi";
 import LoadingPage from "@/components/loadingPage";
-import { Canvas, RoundedRect, Text, BlurMask, useFont } from "@shopify/react-native-skia";
-import { useSharedValue, withTiming, useDerivedValue, useAnimatedReaction, useFrameCallback } from "react-native-reanimated";
+import { Canvas, RoundedRect, Text, BlurMask } from "@shopify/react-native-skia";
+import { useSharedValue, withTiming, useFrameCallback } from "react-native-reanimated";
 import { useRef } from "react";
 import { runOnUI, runOnJS } from "react-native-reanimated";
 import { DIMENSIONS } from "@/Constants/dimensions";
 import { GRID_SIZE } from "@/Constants/grid";
 import { CELLS_COLOR } from "@/Constants/cellsColor";
 import { deleteCompleteLines, getGhostX, getRandomPiece, placePiece, rotatePiece, placeAndAnimateCellForHardFall, movePieceTo } from "@/utils/gameUtils";
-import { useBlankGrid, useTransparentPiece } from "@/utils/gameHooks";
+import { useBlankGrid, useTransparentPiece, useScore } from "@/utils/gameHooks";
 import { GridCell, ActivePieceCell } from "@/types/gameTypes";
+import { ActionType } from "@/types/gameTypes";
+import { getPieceFromType } from "@/utils/replayUtils";
+import { useTimer } from "@/hooks/useTimer";
 
-export default function ReplayGame() {
+export default function ReplayGamePage() {
     const { gameOwner } = useLocalSearchParams();
     const [game, setGame] = useState<Game | null>(null);
 
@@ -85,36 +89,9 @@ export default function ReplayGame() {
         }
       }); 
     
-  const fontSize = 28;
-  const font = useFont(require("@/assets/fonts/Quicksand-Light.ttf"), fontSize);
-  // stats du jeu
-  const score = useSharedValue<number>(0);
-  const level = useSharedValue<number>(1);
-  const lines = useSharedValue<number>(0);
-  
-  // Valeur de décalage X des textes statiques pour les centrer dans le canvas
-  const xLevel = useSharedValue<number>(0);
-  const xScore = useSharedValue<number>(0);
-  const xLines = useSharedValue<number>(0);
-  
-  // Valeur de décalage X des textes dynamiques pour les centrer dans le canvas
-  const xValueLevel = useSharedValue<number>(0);
-  const xValueScore = useSharedValue<number>(0);
-  const xValueLines = useSharedValue<number>(0);
+  const {fontSize, font, score, level, lines, xLevel, xScore, xLines, xValueLevel, xValueScore, xValueLines, levelText, scoreText, linesText, add2Score, add2Level, add2Lines} = useScore();
 
-  // DerivedValues pour que les textes réagissent au changement de la valeur des stats
-  const levelText = useDerivedValue<string>(() : string => {
-    "worklet";
-    return level.value.toString();
-  });
-  const scoreText = useDerivedValue<string>(() : string => {
-    "worklet";
-    return score.value.toString();
-  });
-  const linesText = useDerivedValue<string>(() : string => {
-    "worklet";
-    return lines.value.toString();
-  });
+  const {timer, xTimer, yTimer, opacity, timerFont} = useTimer();
 
   const cellSize = DIMENSIONS.WIDTH * 0.8 * 0.98 / 10;
   // gap entre deux cellules
@@ -139,27 +116,13 @@ export default function ReplayGame() {
   const gameOver = useSharedValue(false);
   const [gameOverVisible, setGameOverVisible] = useState(false);
 
-  const add2Score = (score2add : number ) => {
-    "worklet";
-    score.value = score.value + score2add;
-  };
-  const add2Level = (level2add : number ) => {
-    "worklet";
-    level.value = level.value + level2add;
-  };
-  const add2Lines = (lines2add : number ) => {
-    "worklet";
-    lines.value = lines.value + lines2add;
-  };
   const router = useRouter();
   useEffect(() => {
       const fetchGame = async () => {
           try {
               const api = await useApi();
-              const response = await api.get(`/services/game/${gameOwner}`);
-              if (response.status === 200) {
-                setGame(response.data);
-              }
+              const response = await api.get(`/game/replay/${gameOwner}`);
+              setGame(response.data);
           } catch (error) {
               router.back();
           }
@@ -167,15 +130,15 @@ export default function ReplayGame() {
         fetchGame();
     }, []);
 
-
   const gameLoop = useFrameCallback((frame) => {
     "worklet";
     if (gameOver.value || !game) {
       return;
     }
+    // Initialisation de la première pièce du jeu
     if (index.value === 0) {
       const action = game.game_actions[index.value];
-      piece.value = action.piece!;
+      piece.value = getPieceFromType(action.piece);
       for (let i = 0; i < 4; i++) {
         for (let j = 0; j < 4; j++) {
           if (piece.value.shape.length > i && piece.value.shape[i].length > j && piece.value.shape[i][j]) {
@@ -193,15 +156,32 @@ export default function ReplayGame() {
       placePiece({...piece.value, color: "white"}, grid.current, ghostX.value, y.value, "stroke");
       index.value = index.value + 1;
     }
+
+    if (frame.timeSinceFirstFrame <= 4000) {
+      if (frame.timeSinceFirstFrame > 3000) {
+        opacity.value = withTiming(0, {duration: 500});
+      }
+      if (frame.timeSinceFirstFrame > 2000) {
+        timer.value = "1";
+      }
+      else if (frame.timeSinceFirstFrame > 1000) {
+        timer.value = "2";
+      }
+      else {
+        timer.value = "3";
+      }
+    }
+
+    // si le timestamp est supérieur au temps écoulé depuis le début du jeu, on execute le ou les actions
     while (index.value < game.game_actions.length && frame.timeSinceFirstFrame > game.game_actions[index.value].timestamp) {
       timestamp.value = game.game_actions[index.value].timestamp;
       placePiece({...piece.value, color: "gray"}, grid.current, ghostX.value, y.value, "stroke");
       switch (game.game_actions[index.value].action_type) {
-        case "end":
+        case ActionType.end:
           gameOver.value = true;
           runOnJS(setGameOverVisible)(true);
           return;
-        case "fall":
+        case ActionType.fall:
           x.value = x.value + 1;
           for (let i = 0; i < 4; i++) {
             for (let j = 0; j < 4; j++) {
@@ -209,9 +189,13 @@ export default function ReplayGame() {
             }
           }
           break;
-        case "hardDrop":
+        case ActionType.hardDrop:
+          const diff = ghostX.value - x.value;
+            if (diff > 0) {
+              add2Score(diff*(level.value*10));
+            }
           break;
-        case "rotate":
+        case ActionType.rotate:
           const newPiece = rotatePiece(piece.value);
           piece.value = newPiece;
           for (let i = 0; i < 4; i++) {
@@ -228,27 +212,23 @@ export default function ReplayGame() {
             }
           }
           break;
-        case "left":
+        case ActionType.left:
           movePieceTo(CellPiece.current, "left", cellSize);
           y.value = y.value - 1;
           break;
-        case "right":
+        case ActionType.right:
           movePieceTo(CellPiece.current, "right", cellSize);
           y.value = y.value + 1;
           break;
-        case "changePiece":
-          if (game.game_actions[index.value-1].action_type === "hardDrop") {
+        case ActionType.changePiece:
+          if (game.game_actions[index.value-1].action_type === ActionType.hardDrop) {
             placeAndAnimateCellForHardFall(grid.current, piece.value, x.value, y.value, ghostX.value, cellSize, gap, level.value);
-            const diff = ghostX.value - x.value;
-            if (diff > 0) {
-              add2Score(diff*(level.value*10));
-            }
           }
           else {
             placePiece(piece.value, grid.current, ghostX.value, y.value, "fill");
           }
           deleteCompleteLines(grid.current, {level: level.value, score: score.value, lines: lines.value, add2Score: add2Score, add2Level: add2Level, add2Lines: add2Lines}, cellSize, gap);
-          const changedPiece = game.game_actions[index.value].piece!;
+          const changedPiece = getPieceFromType(game.game_actions[index.value].piece);
           piece.value = changedPiece;
           x.value = 0;
           y.value = 4;
@@ -267,8 +247,11 @@ export default function ReplayGame() {
           }
           break;
           default:
+            console.log("action non reconnue");
             break;
       }
+      // on replace le fantôme de la pièce active une fois une action executée
+      // placé ici pour une meilleur lisibilité du code et moins de redondance
       ghostX.value = getGhostX(piece.value, grid.current, x.value, y.value);
       placePiece({...piece.value, color: "white"}, grid.current, ghostX.value, y.value, "stroke");
       index.value = index.value + 1;
@@ -325,25 +308,7 @@ export default function ReplayGame() {
     }
   }, [gameOverVisible]);
 
-  // Recalculer les positions des sharedValues quand elles changent 
-  // permet de garder centrer les textes dans les canvas pour éviter d'utiliser un useState pour les textes et rerender tous les cubes
-  useAnimatedReaction(
-    () => {
-      return {
-        levelText: level.value.toString(),
-        scoreText: score.value.toString(),
-        linesText: lines.value.toString(),
-        fontReady: font !== null
-      };
-    },
-    (current) => {
-      if (current.fontReady && font) {
-        xValueLevel.value = (DIMENSIONS.WIDTH - font.measureText(current.levelText).width)/2;
-        xValueScore.value = (DIMENSIONS.WIDTH/2 - font.measureText(current.scoreText).width)/2;
-        xValueLines.value = (DIMENSIONS.WIDTH/2 - font.measureText(current.linesText).width)/2;
-      }
-    }
-  );
+
   if (!game) {
     return (
         <LoadingPage />
@@ -402,6 +367,7 @@ export default function ReplayGame() {
                           style={"fill"}
                           opacity={cell.opacity}   
                         /> ))}
+                    <Text x={xTimer} y={yTimer} text={timer} font={timerFont} color="white" opacity={opacity} />
                   </Canvas>
               </View>
             </View>
