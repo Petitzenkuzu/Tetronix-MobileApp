@@ -272,6 +272,7 @@ export default function ReplayGamePage() {
     level.value = 1;
     lines.value = 0;
     index.value = 0;
+    opacity.value = 1;
     x.value = 0;
     y.value = 4;
     for (let i = 0; i < grid.current.length ; i++) {

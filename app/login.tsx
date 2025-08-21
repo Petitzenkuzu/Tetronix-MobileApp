@@ -31,7 +31,7 @@ async function login(params: string){
   try {
     let response = await axios.get(`${process.env.EXPO_PUBLIC_BACKEND_URL || ""}/auth/github?${params}`);
     if(response.status === 200){
-      router.push("/");
+      router.replace("/");
     }
 
   } 

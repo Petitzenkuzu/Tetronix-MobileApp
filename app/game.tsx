@@ -181,6 +181,7 @@ export default function GamePage() {
 
     }
     ws.onclose = (event) => {
+      /* laisser en commentaire car le free tier render ferme le ws à cause de la latence
       switch (event.code) {
         case 1000:
           break;
@@ -195,8 +196,9 @@ export default function GamePage() {
           break;
         default:
           break;
-      }
+      }*/
     }
+      
     ws.onerror = (error) => {
       router.replace("/");
     }
@@ -252,7 +254,7 @@ export default function GamePage() {
         }
       }
       gameOver.value = true;
-      runOnJS(sendActionOnWebSocket)({action_type: ActionType.end, piece : PieceType.void ,timestamp: Math.floor(timestamp.value)});
+      runOnJS(sendActionOnWebSocket)({action_type: ActionType.end, piece : PieceType.void ,timestamp: Math.floor(timestamp.value+1)});
       runOnJS(setGameOverVisible)(true);
       return;
     }
@@ -270,6 +272,7 @@ export default function GamePage() {
     swipeDistance.value = 0;
     delay.value = 3000;
     gameStarted.value = false;
+    opacity.value = 1;
     x.value = 0;
     y.value = 4; 
     for (let i = 0; i < grid.current.length; i++) {
@@ -449,7 +452,7 @@ export default function GamePage() {
               }
               movePieceTo(CellPiece.current, "right", cellSize);
               runOnJS(sendActionOnWebSocket)({action_type: ActionType.right, piece : PieceType[newPiece.color as keyof typeof PieceType] ,timestamp: Math.floor(frame.timeSinceFirstFrame)});
-              runOnJS(sendActionOnWebSocket)({action_type: ActionType.rotate, piece: PieceType[newPiece.color as keyof typeof PieceType], timestamp: Math.floor(frame.timeSinceFirstFrame)});
+              runOnJS(sendActionOnWebSocket)({action_type: ActionType.rotate, piece: PieceType[newPiece.color as keyof typeof PieceType], timestamp: Math.floor(frame.timeSinceFirstFrame+1)});
               break;
             }
             else if (isPiecePlaceable(newPiece, grid.current, x.value, y.value-1)) {
@@ -468,7 +471,7 @@ export default function GamePage() {
               }
               movePieceTo(CellPiece.current, "left", cellSize);
               runOnJS(sendActionOnWebSocket)({action_type: ActionType.left, piece : PieceType[newPiece.color as keyof typeof PieceType] ,timestamp: Math.floor(frame.timeSinceFirstFrame)});
-              runOnJS(sendActionOnWebSocket)({action_type: ActionType.rotate, piece: PieceType[newPiece.color as keyof typeof PieceType], timestamp: Math.floor(frame.timeSinceFirstFrame)});
+              runOnJS(sendActionOnWebSocket)({action_type: ActionType.rotate, piece: PieceType[newPiece.color as keyof typeof PieceType], timestamp: Math.floor(frame.timeSinceFirstFrame+1)});
               break;
             }
 
@@ -502,7 +505,7 @@ export default function GamePage() {
             placeAndAnimateCellForHardFall(grid.current, piece.value, x.value, y.value, ghostX.value, cellSize, gap, level.value);
             runOnJS(sendActionOnWebSocket)({action_type: ActionType.hardDrop, piece : PieceType[piece.value.color as keyof typeof PieceType] ,timestamp: Math.floor(frame.timeSinceFirstFrame)});
             handleChangingActivePiece();
-            runOnJS(sendActionOnWebSocket)({action_type: ActionType.changePiece, piece: PieceType[piece.value.color as keyof typeof PieceType], timestamp: Math.floor(frame.timeSinceFirstFrame)});
+            runOnJS(sendActionOnWebSocket)({action_type: ActionType.changePiece, piece: PieceType[piece.value.color as keyof typeof PieceType], timestamp: Math.floor(frame.timeSinceFirstFrame+2)});
             break;
           case ActionType.fall:
             if (isPiecePlaceable(piece.value, grid.current, x.value+1, y.value)) {
