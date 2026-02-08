@@ -1,3 +1,5 @@
+import { PieceType } from "@/types/gameTypes";
+
 export const PIECES = {
     I:() => ({
         shape: [
@@ -6,7 +8,7 @@ export const PIECES = {
             [false, true, false, false],
             [false, true, false, false]
         ],
-        color: "cyan"
+        piece_type: PieceType.Cyan
     }),
     L: () => ({
         shape: [
@@ -14,14 +16,14 @@ export const PIECES = {
             [false, true, false],
             [false, true, true]
         ],
-        color: "blue"
+        piece_type: PieceType.Blue
     }),
     O: () => ({
         shape: [
             [true, true],
             [true, true]
         ],
-        color: "yellow"
+        piece_type: PieceType.Yellow
     }),
     J: () => ({
         shape: [
@@ -29,7 +31,7 @@ export const PIECES = {
             [false, true, false],
             [true, true, false]
         ],
-        color: "orange"
+        piece_type: PieceType.Orange
     }),
     T: () => ({
         shape: [
@@ -37,7 +39,7 @@ export const PIECES = {
             [true, true, true],
             [false, false, false]
         ],
-        color: "purple"
+        piece_type: PieceType.Purple
     }),
     Z: () => ({
         shape: [
@@ -45,7 +47,7 @@ export const PIECES = {
             [false, true, true],
             [false, false, false]
         ],
-        color: "green"
+        piece_type: PieceType.Green
     }),
     S: () => ({
         shape: [
@@ -53,6 +55,6 @@ export const PIECES = {
             [true, true, false],
             [false, false, false]
         ],
-        color: "red"
+        piece_type: PieceType.Red
     })
 };

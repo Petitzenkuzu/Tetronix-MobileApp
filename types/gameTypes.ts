@@ -1,8 +1,32 @@
 import { SharedValue } from "react-native-reanimated";
 
+export type State = {
+    timestamp: number;
+    x: number;
+    y: number;
+    current_piece: Piece;
+    grid: {grid: PieceType[][]}
+    score: number;
+    level: number;
+    lines: number;
+    last_processed_action: number;
+    finished: boolean;
+};
+
 export type Piece = {
     shape: boolean[][];
-    color: string;
+    piece_type: PieceType;
+}
+
+export enum PieceType {
+    Cyan = 0x00,
+    Blue = 0x01,
+    Yellow = 0x02,
+    Orange = 0x03,
+    Purple = 0x04,
+    Green = 0x05,
+    Red = 0x06,
+    Empty = 0x07,
 }
 
 export type Action = {

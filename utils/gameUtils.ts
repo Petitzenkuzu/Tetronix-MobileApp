@@ -1,6 +1,6 @@
 import { PIECES } from "../Constants/piece";
 import { GRID_SIZE } from "../Constants/grid";
-import { GridCell, Piece, scoreManager, ActivePieceCell } from "@/types/gameTypes";
+import { GridCell, Piece, scoreManager, ActivePieceCell, PieceType } from "@/types/gameTypes";
 import { withTiming, Easing, withSequence, withDelay, runOnJS} from "react-native-reanimated";
 import { CELLS_COLOR } from "@/Constants/cellsColor";
 
@@ -21,7 +21,7 @@ export const getRandomPiece = () : Piece => {
  */
 export const getVoidPiece = () : Piece => {
   "worklet";
-  return {shape: [[false], [false], [false], [false]], color: "transparent"};
+  return {shape: [[false], [false], [false], [false]], piece_type: PieceType.Empty};
 };
 
 /**
@@ -45,7 +45,7 @@ export const placePiece = (piece : Piece, grid: GridCell[][], x: number, y: numb
   for (let i = 0; i < piece.shape.length; i++) {
     for (let j = 0; j < piece.shape[i].length; j++) {
       if (piece.shape[i][j]) {
-        grid[x + i][y + j].color.value = CELLS_COLOR[piece.color as keyof typeof CELLS_COLOR];
+        grid[x + i][y + j].color.value = CELLS_COLOR[getColorFromPieceType(piece.piece_type) as keyof typeof CELLS_COLOR];
         grid[x + i][y + j].style.value = style;
       }
     }
@@ -87,7 +87,7 @@ export const movePieceTo = (CellPiece: ActivePieceCell[][], direction: "left" | 
  */
 export const rotatePiece = (piece: Piece) : Piece => {
   "worklet";
-  return {shape: piece.shape.map((row, index) => row.map((_, j) => piece.shape[piece.shape.length - j - 1][index])), color: piece.color};
+  return {shape: piece.shape.map((row, index) => row.map((_, j) => piece.shape[piece.shape.length - j - 1][index])), piece_type: piece.piece_type};
 };
 
 /**
@@ -147,7 +147,7 @@ export const placeAndAnimateCellForHardFall = (grid : GridCell[][],piece : Piece
   for (let i = 0; i < piece.shape.length; i++) {
     for (let j = 0; j < piece.shape[i].length; j++) {
       if (piece.shape[i][j]) {
-        grid[ghostX + i][y + j].color.value = CELLS_COLOR[piece.color as keyof typeof CELLS_COLOR];
+        grid[ghostX + i][y + j].color.value = CELLS_COLOR[getColorFromPieceType(piece.piece_type) as keyof typeof CELLS_COLOR];
         grid[ghostX + i][y + j].style.value = "fill";
         grid[ghostX + i][y + j].blur.value = 20;
         grid[ghostX + i][y + j].y.value = x*cellSize+gap/2;
@@ -236,4 +236,51 @@ export const deleteCompleteLines = (grid: GridCell[][], scoreManager: scoreManag
   return;
 }
 
+export const getColorFromPieceType = (pieceType: PieceType) : string => {
+  "worklet";
+  switch (pieceType) {
+    case PieceType.Cyan:
+      return "cyan";
+    case PieceType.Blue:
+      return "blue";
+    case PieceType.Yellow:
+      return "yellow";
+    case PieceType.Orange:
+      return "orange";
+    case PieceType.Purple:
+      return "purple";
+    case PieceType.Green:
+      return "green";
+    case PieceType.Red:
+      return "red";
+    case PieceType.Empty:
+      return "gray";
+  }
+}
 
+export const isDifferentGrid = (grid1: PieceType[][], grid2: GridCell[][]) : boolean => {
+  "worklet";
+  for (let i = 0; i < grid1.length; i++) {
+    for (let j = 0; j < grid1[i].length; j++) {
+      if (CELLS_COLOR[getColorFromPieceType(grid1[i][j]) as keyof typeof CELLS_COLOR] !== grid2[i][j].color.value) {
+        return true;
+      }
+    }
+  }
+  return false;
+}
+
+export const isDifferentShape = (shape1: boolean[][], shape2: boolean[][]) : boolean => {
+  "worklet";
+  if (shape1.length !== shape2.length) {
+    return true;
+  }
+  for (let i = 0; i < shape1.length; i++) {
+    for (let j = 0; j < shape1[i].length; j++) {
+      if (shape1[i][j] !== shape2[i][j]) {
+        return true;
+      }
+    }
+  }
+  return false;
+}

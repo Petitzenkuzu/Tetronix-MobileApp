@@ -29,7 +29,7 @@ export const useBlankGrid = (GRID_SIZE: { HEIGHT: number; WIDTH: number }, cellS
  * @param gap espace entre les cellules
  * @returns grille permettant l'affichage dynamique de la pièce
  */
-export const usePiece = (piece: Piece, x: SharedValue<number>, y: SharedValue<number>, cellSize: number, gap: number) => {
+export const usePiece = () => {
     "worklet";
     const newGrid = Array(4).fill(null).map(() => 
       Array(4).fill(null).map(() => ({
@@ -40,22 +40,6 @@ export const usePiece = (piece: Piece, x: SharedValue<number>, y: SharedValue<nu
         opacity: useSharedValue(0)
       }))
     );
-    for (let i = 0; i < piece.shape.length; i++) {
-      for (let j = 0; j < piece.shape[i].length; j++) {
-        if (piece.shape[i][j]) {  
-          newGrid[i][j].color.value = CELLS_COLOR[piece.color as keyof typeof CELLS_COLOR];
-          newGrid[i][j].opacity.value = 1;
-          newGrid[i][j].x.value = y.value*cellSize+gap/2 + j*cellSize;
-          newGrid[i][j].y.value = x.value*cellSize+gap/2 + i*cellSize;
-        }
-        else {
-          newGrid[i][j].color.value = CELLS_COLOR[piece.color as keyof typeof CELLS_COLOR];
-          newGrid[i][j].opacity.value = 0;
-          newGrid[i][j].x.value = y.value*cellSize+gap/2 + j*cellSize;
-          newGrid[i][j].y.value = x.value*cellSize+gap/2 + i*cellSize;
-        }
-      }
-    }
     return newGrid;
   };
 
