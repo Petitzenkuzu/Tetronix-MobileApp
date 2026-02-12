@@ -4,17 +4,6 @@ import { GridCell, Piece, scoreManager, ActivePieceCell, PieceType } from "@/typ
 import { withTiming, Easing, withSequence, withDelay, runOnJS} from "react-native-reanimated";
 import { CELLS_COLOR } from "@/Constants/cellsColor";
 
-
-/**
- * fonction pour générer une pièce aléatoire
- * @returns une pièce aléatoire
- */
-export const getRandomPiece = () : Piece => {
-  const pieceTypes = Object.keys(PIECES);
-  const randomType = pieceTypes[Math.floor(Math.random() * pieceTypes.length)];
-  return PIECES[randomType as keyof typeof PIECES]();
-};
-
 /**
  * fonction pour générer une pièce vide
  * @returns une pièce vide
@@ -24,13 +13,6 @@ export const getVoidPiece = () : Piece => {
   return {shape: [[false], [false], [false], [false]], piece_type: PieceType.Empty};
 };
 
-/**
- * fonction pour générer un ensemble de 10 pièces aléatoires
- * @returns un tableau de 10 pièces aléatoires
- */
-export const getSetOfRandomPieces = () : Piece[] => {
-  return Array(10).fill(null).map(() => getRandomPiece());
-}
 
 /**
  * fonction pour placer la pièce sur la grille

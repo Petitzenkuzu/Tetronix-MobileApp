@@ -35,6 +35,18 @@ export type Action = {
     piece: PieceType;
 }
 
+export type ClientAction = {
+    action_type: ClientActionType;
+    id: number;
+}
+
+export enum ClientActionType {
+    right = 0x00,
+    left = 0x01,
+    rotate = 0x02,
+    hardDrop = 0x03,
+}
+
 export enum ActionType {
     start = 0x00,
     rotate = 0x01,

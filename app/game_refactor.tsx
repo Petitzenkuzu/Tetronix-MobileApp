@@ -4,11 +4,11 @@ import React ,{ useState, useRef, useCallback, useEffect } from "react";
 import { useSharedValue, useDerivedValue, useAnimatedReaction, runOnJS, useFrameCallback, SharedValue, runOnUI } from 'react-native-reanimated';
 import { GRID_SIZE } from "../Constants/grid";
 import { CELLS_COLOR } from "@/Constants/cellsColor";
-import { deleteCompleteLines, getGhostX, getRandomPiece, isPiecePlaceable, placePiece, rotatePiece,getSetOfRandomPieces, getVoidPiece, placeAndAnimateCellForHardFall, movePieceTo, getColorFromPieceType, isDifferentShape } from "../utils/gameUtils";
+import { deleteCompleteLines, getGhostX, isPiecePlaceable, placePiece, rotatePiece, getVoidPiece, placeAndAnimateCellForHardFall, movePieceTo, getColorFromPieceType, isDifferentShape } from "../utils/gameUtils";
 import { useBlankGrid, usePiece, useScore } from "@/utils/gameHooks";
 import { DIMENSIONS } from "../Constants/dimensions";
 import { Canvas, RoundedRect, Text, useFont, BlurMask} from "@shopify/react-native-skia";
-import { GridCell, Piece, ActivePieceCell, Action, Game, ActionType, PieceType, State} from '@/types/gameTypes';
+import { GridCell, Piece, ActivePieceCell, Action, Game, ActionType, PieceType, State, ClientAction, ClientActionType} from '@/types/gameTypes';
 import { User } from '@/types/auth';
 import { GestureHandlerRootView, Gesture, GestureDetector } from 'react-native-gesture-handler';
 import { withTiming } from "react-native-reanimated";
@@ -109,11 +109,11 @@ export default function GamePage() {
   // delai pour modifiable pour pouvoir gérer facilement des délais ( celui de départ, celui de changement de pièce )
   const delay = useSharedValue(3000);
   // Queue d'actions à effectuer
-  const actionQueue = useSharedValue<ActionType[]>([]);
+  const actionQueue = useSharedValue<ClientActionType[]>([]);
   // Grille de jeu avec des sharedValues pour gérer les couleurs si c'est une cellule fill ou stroke
   const grid = useRef<GridCell[][]>(useBlankGrid(GRID_SIZE, cellSize, gap));
   // Valeurs de la pièce active
-  const piece = useSharedValue<Piece>(getRandomPiece());
+  const piece = useSharedValue<Piece>(getVoidPiece());
   // x de la pièce active 
   const x = useSharedValue(0);
   // y de la pièce active
@@ -135,7 +135,9 @@ export default function GamePage() {
   // Game over visible pour gérer le modal
   const [gameOverVisible, setGameOverVisible] = useState(false);
   // WebSocket pour le streaming serveur
-  const [webSocket, setWebSocket] = useState<WebSocket | null>(null);
+  const webSocket = useRef<WebSocket | null>(null);
+  // Id pour l'envoie des actions
+  const ActionId = useSharedValue(0);
   // Calcul des positions initiales des textes pour les centrer dans le canvas
   useEffect(() => {
     if (font) {
@@ -152,7 +154,7 @@ export default function GamePage() {
    * Gestion du websocket
    */
   useEffect(() => {
-    if (webSocket) {
+    if (webSocket.current) {
       //startGameLoop();
       return;
     }
@@ -160,7 +162,7 @@ export default function GamePage() {
     let url = `${process.env.EXPO_PUBLIC_BACKEND_URL_WEBSOCKET}/game/start`;
     const ws = new WebSocket(url);
     ws.onopen = () => {
-        
+        console.log("WebSocket opened");
     }
     ws.onmessage = (event) => {
       let state = JSON.parse(event.data);
@@ -196,8 +198,8 @@ export default function GamePage() {
     ws.onerror = (error) => {
       router.replace("/");
     }
-    setWebSocket(ws);
-  },[webSocket]);
+    webSocket.current = ws;
+  },[]);
 
   /**
    * Gestion du game over
@@ -219,6 +221,7 @@ export default function GamePage() {
       replacePiece(state.current_piece);
     }
   }
+
   const replaceGrid = (grid_state: PieceType[][]) => {
     "worklet";
     for (let i = 0; i < grid_state.length; i++) {
@@ -252,19 +255,51 @@ export default function GamePage() {
     }
   }
 
+  const processActions = (action: ClientActionType) => {
+    "worklet";
+    console.log("action: ", action);
+      switch (action) {
+        case ClientActionType.rotate:
+          const newPiece = rotatePiece(piece.value);
+          if (isPiecePlaceable(newPiece, grid.current, x.value, y.value)) {
+            piece.value = newPiece;
+            replacePiece(newPiece);
+            runOnJS(sendActionOnWebSocket)({action_type: ClientActionType.rotate, id: ActionId.value});
+            ActionId.value = ActionId.value + 1;
+          }
+          break;
+        case ClientActionType.right:
+          if (isPiecePlaceable(piece.value, grid.current, x.value, y.value+1)) {
+            movePieceTo(CellPiece.current, "right", cellSize);
+            y.value = y.value + 1;
+            runOnJS(sendActionOnWebSocket)({action_type: ClientActionType.right, id: ActionId.value});
+            ActionId.value = ActionId.value + 1;
+          }
+          break;
+        case ClientActionType.left:
+          if (isPiecePlaceable(piece.value, grid.current, x.value, y.value-1)) {
+            movePieceTo(CellPiece.current, "left", cellSize);
+            y.value = y.value - 1;
+            runOnJS(sendActionOnWebSocket)({action_type: ClientActionType.left, id: ActionId.value});
+            ActionId.value = ActionId.value + 1;
+          }
+          break;
+        case ClientActionType.hardDrop:
+          //sendActionOnWebSocket({action_type: ClientActionType.hardDrop, id: ActionId.value});
+          break;
+      }
+  }
   /**
   * Envoie une action sur le websocket, si l'action est un end, on ferme le websocket et on empêche l'envoie du changePiece en trop
   * @param action l'action à envoyer
   */        
-  function sendActionOnWebSocket(action: Action) {
-    if (webSocket && webSocket.readyState === WebSocket.OPEN) {
-
-      const buffer = new ArrayBuffer(10);
-      const view = new DataView(buffer);
+  function sendActionOnWebSocket(action: ClientAction) {
+    if (webSocket.current && webSocket.current.readyState === WebSocket.OPEN) {
+      let buffer = new ArrayBuffer(5);
+      let view = new DataView(buffer);
       view.setUint8(0, action.action_type);
-      view.setUint8(1, action.piece);
-      view.setBigInt64(2, BigInt(action.timestamp));
-      webSocket.send(buffer);
+      view.setUint32(1, action.id, false);
+      webSocket.current.send(buffer);
     }
   };
 
@@ -275,7 +310,7 @@ export default function GamePage() {
       if (gameOver.value) {
         return;
       }
-      actionQueue.value.push(ActionType.rotate);
+      actionQueue.value.push(ClientActionType.rotate);
     });
 
     const swipe = Gesture.Pan()
@@ -298,13 +333,13 @@ export default function GamePage() {
           // déplacement vers la droite
         if (swipeDistance.value > cellSize) {
           swipeDistance.value = 0;
-          actionQueue.value.push(ActionType.right);
+          actionQueue.value.push(ClientActionType.right);
           return;
         }
         // déplacement vers la gauche
         if (swipeDistance.value < -cellSize) {
           swipeDistance.value = 0;
-          actionQueue.value.push(ActionType.left);
+          actionQueue.value.push(ClientActionType.left);
           return;
         }
         return;
@@ -316,7 +351,7 @@ export default function GamePage() {
         }
         swipeDistance.value = 0;
         if (event.velocityY > 2500) {
-          actionQueue.value.push(ActionType.hardDrop);
+          actionQueue.value.push(ClientActionType.hardDrop);
         }
       });
 
@@ -326,8 +361,11 @@ export default function GamePage() {
     if (gameOver.value) {
       return;
     }
-    if (frame.timeSinceFirstFrame > timestamp.value + delay.value + 1000*(0.8**level.value)) {
-      timestamp.value = frame.timeSinceFirstFrame;
+    if (actionQueue.value.length > 0) {
+      const actions = actionQueue.value.splice(0);
+      for (let i = 0; i < actions.length; i++) {
+        processActions(actions[i]);
+      }
     }
   });
 
