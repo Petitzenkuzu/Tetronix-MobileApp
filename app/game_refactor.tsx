@@ -114,6 +114,8 @@ export default function GamePage() {
   const grid = useRef<GridCell[][]>(useBlankGrid(GRID_SIZE, cellSize, gap));
   // Valeurs de la pièce active
   const piece = useSharedValue<Piece>(getVoidPiece());
+  // Valeurs de la pièce suivante
+  const nextPiece = useSharedValue<Piece>(getVoidPiece());
   // x de la pièce active 
   const x = useSharedValue(0);
   // y de la pièce active
@@ -137,7 +139,10 @@ export default function GamePage() {
   // WebSocket pour le streaming serveur
   const webSocket = useRef<WebSocket | null>(null);
   // Id pour l'envoie des actions
-  const ActionId = useSharedValue(0);
+  const ActionId = useSharedValue(1);
+  // Actions non committées
+  const uncommittedActions = useSharedValue<ClientAction[]>([]);
+
   // Calcul des positions initiales des textes pour les centrer dans le canvas
   useEffect(() => {
     if (font) {
@@ -167,14 +172,12 @@ export default function GamePage() {
     ws.onmessage = (event) => {
       let state = JSON.parse(event.data);
       timestamp.value = state.timestamp;
-
-      runOnUI(() => {
-        x.value = state.x;
-        y.value = state.y;
-        piece.value = state.current_piece;
-        replacePiece(state.current_piece);
-        replaceGrid(state.grid.grid);
-      })();
+      if (state.finished) {
+        gameOver.value = true;
+        setGameOverVisible(true);
+        return;
+      }
+      runOnJS(processState)(state);
     }
     ws.onclose = (event) => {
       /* laisser en commentaire car le free tier render ferme le ws à cause de la latence
@@ -201,24 +204,31 @@ export default function GamePage() {
     webSocket.current = ws;
   },[]);
 
-  /**
-   * Gestion du game over
-   */
-  useEffect(() => {
-    if (gameOverVisible == true) {
-      //stopGameLoop();
-    }
-  },[gameOverVisible]);
-
   const processState = (state: State) => {
     "worklet";
+    console.log("server_action_id", state.last_processed_action);
+    console.log("client_action_id", ActionId.value);
+    let actions = [];
+    for (let i = 0; i < uncommittedActions.value.length; i++) {
+      if (uncommittedActions.value[i].id > state.last_processed_action) {
+        actions.push(uncommittedActions.value[i]);
+      }
+    }
+    uncommittedActions.value = actions;
     timestamp.value = state.timestamp;
-    if (x.value !== state.x || y.value !== state.y || isDifferentShape(piece.value.shape, state.current_piece.shape)) {
+    if (x.value != state.x || y.value != state.y || isDifferentShape(piece.value.shape, state.current_piece.shape)) {
+      score.value = state.score;
+      level.value = state.level;
+      lines.value = state.lines;
+      replaceGrid(state.grid.grid);
       x.value = state.x;
       y.value = state.y;
       piece.value = state.current_piece;
-      replaceGrid(state.grid.grid);
-      replacePiece(state.current_piece);
+      nextPiece.value = state.next_piece;
+      replacePiece(piece.value);
+    }
+    for (let i = 0; i < actions.length; i++) {
+      processActions(actions[i].action_type, false);
     }
   }
 
@@ -240,53 +250,79 @@ export default function GamePage() {
 
   const replacePiece = (piece_state: Piece) => {
   "worklet";
-    for (let i = 0; i < piece_state.shape.length; i++) {
-      for (let j = 0; j < piece_state.shape[i].length; j++) {
+    for (let i = 0; i < CellPiece.current.length; i++) {
+      for (let j = 0; j < CellPiece.current[i].length; j++) {
+        CellPiece.current[i][j].opacity.value = 0;
         CellPiece.current[i][j].x.value = y.value*cellSize+gap/2 + j*cellSize;
         CellPiece.current[i][j].y.value = x.value*cellSize+gap/2 + i*cellSize;
+      }
+    }
+    for (let i = 0; i < piece_state.shape.length; i++) {
+      for (let j = 0; j < piece_state.shape[i].length; j++) {
+        CellPiece.current[i][j].color.value = CELLS_COLOR[getColorFromPieceType(piece_state.piece_type) as keyof typeof CELLS_COLOR];
         if (piece_state.shape[i][j]) {
           CellPiece.current[i][j].opacity.value = 1;
         }
         else {
           CellPiece.current[i][j].opacity.value = 0;
         }
-        CellPiece.current[i][j].color.value = CELLS_COLOR[getColorFromPieceType(piece_state.piece_type) as keyof typeof CELLS_COLOR];
       }
     }
   }
 
-  const processActions = (action: ClientActionType) => {
+  const processActions = (action: ClientActionType, send : boolean) => {
     "worklet";
-    console.log("action: ", action);
       switch (action) {
         case ClientActionType.rotate:
           const newPiece = rotatePiece(piece.value);
           if (isPiecePlaceable(newPiece, grid.current, x.value, y.value)) {
             piece.value = newPiece;
             replacePiece(newPiece);
-            runOnJS(sendActionOnWebSocket)({action_type: ClientActionType.rotate, id: ActionId.value});
-            ActionId.value = ActionId.value + 1;
+            if (send) {
+              runOnJS(sendActionOnWebSocket)({action_type: ClientActionType.rotate, id: ActionId.value});
+              ActionId.value = ActionId.value + 1;
+            }
           }
           break;
         case ClientActionType.right:
           if (isPiecePlaceable(piece.value, grid.current, x.value, y.value+1)) {
             movePieceTo(CellPiece.current, "right", cellSize);
             y.value = y.value + 1;
-            runOnJS(sendActionOnWebSocket)({action_type: ClientActionType.right, id: ActionId.value});
-            ActionId.value = ActionId.value + 1;
+            if (send) {
+              runOnJS(sendActionOnWebSocket)({action_type: ClientActionType.right, id: ActionId.value});
+              ActionId.value = ActionId.value + 1;
+            }
           }
           break;
         case ClientActionType.left:
           if (isPiecePlaceable(piece.value, grid.current, x.value, y.value-1)) {
             movePieceTo(CellPiece.current, "left", cellSize);
             y.value = y.value - 1;
-            runOnJS(sendActionOnWebSocket)({action_type: ClientActionType.left, id: ActionId.value});
-            ActionId.value = ActionId.value + 1;
+            if (send) {
+              runOnJS(sendActionOnWebSocket)({action_type: ClientActionType.left, id: ActionId.value});
+              ActionId.value = ActionId.value + 1;
+            }
           }
           break;
         case ClientActionType.hardDrop:
-          //sendActionOnWebSocket({action_type: ClientActionType.hardDrop, id: ActionId.value});
-          break;
+          let ghostX = getGhostX(piece.value, grid.current, x.value, y.value);
+          let diff = ghostX - x.value;
+          if (diff > 0) {
+            add2Score(diff*(level.value*10));
+          }
+          const color = CELLS_COLOR[getColorFromPieceType(piece.value.piece_type) as keyof typeof CELLS_COLOR];
+          placeAndAnimateCellForHardFall(grid.current, piece.value.shape, color, x.value, y.value, ghostX, cellSize, gap, level.value);
+          deleteCompleteLines(grid.current, {score: score.value, level: level.value, lines: lines.value, add2Score: add2Score, add2Level: add2Level, add2Lines: add2Lines}, cellSize, gap);
+          if (send) {
+            runOnJS(sendActionOnWebSocket)({action_type: ClientActionType.hardDrop, id: ActionId.value});
+            ActionId.value = ActionId.value + 1;
+          }
+          piece.value = nextPiece.value;
+          x.value = 0;
+          y.value = 4;
+          if (isPiecePlaceable(piece.value, grid.current, x.value, y.value)) {
+            replacePiece(piece.value);
+          }
       }
   }
   /**
@@ -295,6 +331,7 @@ export default function GamePage() {
   */        
   function sendActionOnWebSocket(action: ClientAction) {
     if (webSocket.current && webSocket.current.readyState === WebSocket.OPEN) {
+      uncommittedActions.value.push(action);
       let buffer = new ArrayBuffer(5);
       let view = new DataView(buffer);
       view.setUint8(0, action.action_type);
@@ -364,7 +401,7 @@ export default function GamePage() {
     if (actionQueue.value.length > 0) {
       const actions = actionQueue.value.splice(0);
       for (let i = 0; i < actions.length; i++) {
-        processActions(actions[i]);
+        processActions(actions[i], true);
       }
     }
   });

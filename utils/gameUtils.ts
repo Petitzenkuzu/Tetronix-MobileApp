@@ -123,13 +123,14 @@ export const getGhostX = (piece: Piece, grid: GridCell[][], x: number, y: number
  * @param ghostX : position x du ghost
  * @param cellSize : taille d'une cellule
  * @param gap : espace entre deux cellules
+ * @description you must pass the shape and the color of the piece to place the cell for the hard fall cause if you give directly the piece and try to get the color it will crash for no reason
  */
-export const placeAndAnimateCellForHardFall = (grid : GridCell[][],piece : Piece, x : number, y : number, ghostX : number, cellSize : number, gap : number, level : number) => {
+export const placeAndAnimateCellForHardFall = (grid : GridCell[][],shape : boolean[][], color : string, x : number, y : number, ghostX : number, cellSize : number, gap : number, level : number) => {
   "worklet";
-  for (let i = 0; i < piece.shape.length; i++) {
-    for (let j = 0; j < piece.shape[i].length; j++) {
-      if (piece.shape[i][j]) {
-        grid[ghostX + i][y + j].color.value = CELLS_COLOR[getColorFromPieceType(piece.piece_type) as keyof typeof CELLS_COLOR];
+  for (let i = 0; i < shape.length; i++) {
+    for (let j = 0; j < shape[i].length; j++) {
+      if (shape[i][j]) {
+        grid[ghostX + i][y + j].color.value = color;
         grid[ghostX + i][y + j].style.value = "fill";
         grid[ghostX + i][y + j].blur.value = 20;
         grid[ghostX + i][y + j].y.value = x*cellSize+gap/2;
@@ -236,6 +237,9 @@ export const getColorFromPieceType = (pieceType: PieceType) : string => {
     case PieceType.Red:
       return "red";
     case PieceType.Empty:
+      return "gray";
+    default:
+      console.log("default ", pieceType);
       return "gray";
   }
 }

@@ -5,6 +5,7 @@ export type State = {
     x: number;
     y: number;
     current_piece: Piece;
+    next_piece: Piece;
     grid: {grid: PieceType[][]}
     score: number;
     level: number;
