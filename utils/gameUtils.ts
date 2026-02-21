@@ -238,8 +238,11 @@ export const getColorFromPieceType = (pieceType: PieceType) : string => {
       return "red";
     case PieceType.Empty:
       return "gray";
+    case PieceType.White:
+      return "white";
+    case PieceType.Gray:
+      return "gray";
     default:
-      console.log("default ", pieceType);
       return "gray";
   }
 }

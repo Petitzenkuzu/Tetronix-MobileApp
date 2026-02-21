@@ -4,7 +4,7 @@ import React ,{ useState, useRef, useCallback, useEffect } from "react";
 import { useSharedValue, useDerivedValue, useAnimatedReaction, runOnJS, useFrameCallback, SharedValue, runOnUI } from 'react-native-reanimated';
 import { GRID_SIZE } from "../Constants/grid";
 import { CELLS_COLOR } from "@/Constants/cellsColor";
-import { deleteCompleteLines, getGhostX, isPiecePlaceable, placePiece, rotatePiece, getVoidPiece, placeAndAnimateCellForHardFall, movePieceTo, getColorFromPieceType, isDifferentShape } from "../utils/gameUtils";
+import { deleteCompleteLines, getGhostX, isPiecePlaceable, placePiece, rotatePiece, getVoidPiece, placeAndAnimateCellForHardFall, movePieceTo, getColorFromPieceType, isDifferentShape, isDifferentGrid } from "../utils/gameUtils";
 import { useBlankGrid, usePiece, useScore } from "@/utils/gameHooks";
 import { DIMENSIONS } from "../Constants/dimensions";
 import { Canvas, RoundedRect, Text, useFont, BlurMask} from "@shopify/react-native-skia";
@@ -126,6 +126,8 @@ export default function GamePage() {
   const CellPiece = useRef<ActivePieceCell[][]>(usePiece());
   // Timestamp pour le décompte du temps
   const timestamp = useSharedValue(0);
+  // Timestamp pour le décompte des fall
+  const lastFallTimestamp = useSharedValue(3000);
   // Timestamp pour empêcher de spammer les hard drop
   const hardDropTimestamp = useSharedValue(-400);
   // Distance de swipe (pour gérer les long swpie lent)
@@ -159,25 +161,53 @@ export default function GamePage() {
    * Gestion du websocket
    */
   useEffect(() => {
-    if (webSocket.current) {
-      //startGameLoop();
-      return;
-    }
-    //stopGameLoop();
+    stopGameLoop();
     let url = `${process.env.EXPO_PUBLIC_BACKEND_URL_WEBSOCKET}/game/start`;
     const ws = new WebSocket(url);
     ws.onopen = () => {
         console.log("WebSocket opened");
     }
     ws.onmessage = (event) => {
-      let state = JSON.parse(event.data);
-      timestamp.value = state.timestamp;
-      if (state.finished) {
-        gameOver.value = true;
-        setGameOverVisible(true);
-        return;
+      let msg = JSON.parse(event.data);
+      switch (msg.type) {
+        case "Start":
+          let startingState = JSON.parse(msg.data);
+          timestamp.value = startingState.timestamp;
+          x.value = startingState.x;
+          y.value = startingState.y;
+          piece.value = startingState.current_piece;
+          nextPiece.value = startingState.next_piece;
+          replacePiece(startingState.current_piece);
+          startGameLoop();
+          break;
+        case "State":
+          let state = JSON.parse(msg.data);
+          timestamp.value = state.timestamp;
+          if (state.finished) {
+            gameOver.value = true;
+            setGameOverVisible(true);
+            return;
+          }
+          runOnUI(processState)(state);
+          break;
+        case "Ack":
+          let data = JSON.parse(msg.data);
+          const processed = data.id;
+          let actions = [];
+          for (let i = 0; i < uncommittedActions.value.length; i++) {
+            if (uncommittedActions.value[i].id > processed) {
+              actions.push(uncommittedActions.value[i]);
+            }
+          }
+          uncommittedActions.value = actions;
+          break;
+        case "End":
+          let endState = JSON.parse(msg.data);
+          runOnUI(replaceGrid)(endState.grid.grid);
+          gameOver.value = true;
+          setGameOverVisible(true);
+          break;
       }
-      runOnJS(processState)(state);
     }
     ws.onclose = (event) => {
       /* laisser en commentaire car le free tier render ferme le ws à cause de la latence
@@ -203,34 +233,6 @@ export default function GamePage() {
     }
     webSocket.current = ws;
   },[]);
-
-  const processState = (state: State) => {
-    "worklet";
-    console.log("server_action_id", state.last_processed_action);
-    console.log("client_action_id", ActionId.value);
-    let actions = [];
-    for (let i = 0; i < uncommittedActions.value.length; i++) {
-      if (uncommittedActions.value[i].id > state.last_processed_action) {
-        actions.push(uncommittedActions.value[i]);
-      }
-    }
-    uncommittedActions.value = actions;
-    timestamp.value = state.timestamp;
-    if (x.value != state.x || y.value != state.y || isDifferentShape(piece.value.shape, state.current_piece.shape)) {
-      score.value = state.score;
-      level.value = state.level;
-      lines.value = state.lines;
-      replaceGrid(state.grid.grid);
-      x.value = state.x;
-      y.value = state.y;
-      piece.value = state.current_piece;
-      nextPiece.value = state.next_piece;
-      replacePiece(piece.value);
-    }
-    for (let i = 0; i < actions.length; i++) {
-      processActions(actions[i].action_type, false);
-    }
-  }
 
   const replaceGrid = (grid_state: PieceType[][]) => {
     "worklet";
@@ -269,15 +271,45 @@ export default function GamePage() {
       }
     }
   }
+  
+  const processState = (state: State) => {
+    "worklet";
+    let actions = [];
+    for (let i = 0; i < uncommittedActions.value.length; i++) {
+      if (uncommittedActions.value[i].id > state.last_processed_action) {
+        actions.push(uncommittedActions.value[i]);
+      }
+    }
+    uncommittedActions.value = actions;
+    timestamp.value = state.timestamp;
+    if (x.value != state.x || y.value != state.y || isDifferentShape(piece.value.shape, state.current_piece.shape) || isDifferentGrid(state.grid.grid, grid.current)) {
+      score.value = state.score;
+      level.value = state.level;
+      lines.value = state.lines;
+      replaceGrid(state.grid.grid);
+      x.value = state.x;
+      y.value = state.y;
+      piece.value = state.current_piece;
+      nextPiece.value = state.next_piece;
+    }
+    for (let i = 0; i < actions.length; i++) {
+      processActions(actions[i].action_type, false);
+    }
+    replacePiece(piece.value);
+  }
 
   const processActions = (action: ClientActionType, send : boolean) => {
     "worklet";
       switch (action) {
+        case ClientActionType.fall:
+          if (isPiecePlaceable(piece.value, grid.current, x.value+1, y.value)) {
+            x.value = x.value + 1;
+          }
+          break;
         case ClientActionType.rotate:
           const newPiece = rotatePiece(piece.value);
           if (isPiecePlaceable(newPiece, grid.current, x.value, y.value)) {
             piece.value = newPiece;
-            replacePiece(newPiece);
             if (send) {
               runOnJS(sendActionOnWebSocket)({action_type: ClientActionType.rotate, id: ActionId.value});
               ActionId.value = ActionId.value + 1;
@@ -286,7 +318,6 @@ export default function GamePage() {
           break;
         case ClientActionType.right:
           if (isPiecePlaceable(piece.value, grid.current, x.value, y.value+1)) {
-            movePieceTo(CellPiece.current, "right", cellSize);
             y.value = y.value + 1;
             if (send) {
               runOnJS(sendActionOnWebSocket)({action_type: ClientActionType.right, id: ActionId.value});
@@ -296,7 +327,6 @@ export default function GamePage() {
           break;
         case ClientActionType.left:
           if (isPiecePlaceable(piece.value, grid.current, x.value, y.value-1)) {
-            movePieceTo(CellPiece.current, "left", cellSize);
             y.value = y.value - 1;
             if (send) {
               runOnJS(sendActionOnWebSocket)({action_type: ClientActionType.left, id: ActionId.value});
@@ -320,8 +350,8 @@ export default function GamePage() {
           piece.value = nextPiece.value;
           x.value = 0;
           y.value = 4;
-          if (isPiecePlaceable(piece.value, grid.current, x.value, y.value)) {
-            replacePiece(piece.value);
+          if (!isPiecePlaceable(piece.value, grid.current, x.value, y.value)) {
+            gameOver.value = true;
           }
       }
   }
@@ -398,11 +428,30 @@ export default function GamePage() {
     if (gameOver.value) {
       return;
     }
+    timestamp.value = frame.timeSinceFirstFrame;
+    if (timestamp.value <= 1000) {
+      actionQueue.value = [];
+    }else if (timestamp.value <= 2000 && timestamp.value > 1000) {
+      timer.value = "2";
+      actionQueue.value = [];
+    }
+    else if (timestamp.value <= 3000 && timestamp.value > 2000) {
+      timer.value = "1";
+      actionQueue.value = [];
+    }
+    else if (timestamp.value > 3000) {
+      timer.value = "";
+    }
+    if (frame.timeSinceFirstFrame > lastFallTimestamp.value + 1000*(0.8**level.value)) {
+      lastFallTimestamp.value = frame.timeSinceFirstFrame;
+      actionQueue.value.push(ClientActionType.fall);
+    }
     if (actionQueue.value.length > 0) {
       const actions = actionQueue.value.splice(0);
       for (let i = 0; i < actions.length; i++) {
         processActions(actions[i], true);
       }
+      replacePiece(piece.value);
     }
   });
 
@@ -472,16 +521,25 @@ const stopGameLoop = () => {
                 </GestureDetector>
               </View>
             </View>
-            <Modal visible={gameOverVisible} transparent={true} animationType="slide">
+            <GameModal gameOverVisible={gameOverVisible} score={score.value} level={level.value} lines={lines.value} />
+          </SafeAreaView>
+          </GestureHandlerRootView>
+      </ImageBackground>
+    );
+}
+
+function GameModal({gameOverVisible, score, level, lines}: {gameOverVisible: boolean, score: number, level: number, lines: number}) {
+  return (
+    <Modal visible={gameOverVisible} transparent={true} animationType="slide">
               <View style={modalStyle.container}>
                 <View style={modalStyle.mainContent}>
                   <View style={modalStyle.gameOverView}>
                     <RNText style={modalStyle.gameOverText}>Game Over</RNText>
                   </View>
                   <View style={modalStyle.statsView}>
-                    <RNText style={modalStyle.statsText}>Score: {score.value}</RNText>
-                    <RNText style={modalStyle.statsText}>Level: {level.value}</RNText>
-                    <RNText style={modalStyle.statsText}>Lines: {lines.value}</RNText>
+                    <RNText style={modalStyle.statsText}>Score: {score}</RNText>
+                    <RNText style={modalStyle.statsText}>Level: {level}</RNText>
+                    <RNText style={modalStyle.statsText}>Lines: {lines}</RNText>
                   </View>
                   <View style={modalStyle.buttonsView}>
                     <Pressable style={modalStyle.buttonPressableHome} onPress={() => { 
@@ -489,17 +547,11 @@ const stopGameLoop = () => {
                     }}>
                       <RNText style={{color: "white", fontSize: 20, fontFamily: "Quicksand", textAlign: "center"}}>BACK TO MENU</RNText>
                     </Pressable>
-                    <Pressable style={modalStyle.buttonPressableRestart} onPress={() => {}}>
-                      <Image source={require("@/assets/images/restart.png")} style={{height: "50%",width: "15%", tintColor: "white", aspectRatio: 1}} />
-                    </Pressable>
                   </View>
                 </View>
               </View>
             </Modal>
-          </SafeAreaView>
-          </GestureHandlerRootView>
-      </ImageBackground>
-    );
+  );
 }
 
 
@@ -552,11 +604,12 @@ const modalStyle = StyleSheet.create({
     flexDirection: "row",
   },
   buttonPressableHome: {
-    width: "70%",
+    width: "90%",
     height: 36,
     justifyContent: "center",
     alignItems: "center",
     marginRight: "5%",
+    marginLeft: "5%",
     backgroundColor: "red",
     borderRadius: 12,
   },

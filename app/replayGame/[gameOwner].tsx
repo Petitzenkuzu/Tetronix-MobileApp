@@ -14,12 +14,13 @@ import { runOnUI, runOnJS } from "react-native-reanimated";
 import { DIMENSIONS } from "@/Constants/dimensions";
 import { GRID_SIZE } from "@/Constants/grid";
 import { CELLS_COLOR } from "@/Constants/cellsColor";
-import { deleteCompleteLines, getGhostX, getRandomPiece, placePiece, rotatePiece, placeAndAnimateCellForHardFall, movePieceTo } from "@/utils/gameUtils";
+import { deleteCompleteLines, getGhostX, getVoidPiece, placePiece, rotatePiece, placeAndAnimateCellForHardFall, movePieceTo, getColorFromPieceType } from "@/utils/gameUtils";
 import { useBlankGrid, useTransparentPiece, useScore } from "@/utils/gameHooks";
 import { GridCell, ActivePieceCell } from "@/types/gameTypes";
 import { ActionType } from "@/types/gameTypes";
 import { getPieceFromType } from "@/utils/replayUtils";
 import { useTimer } from "@/hooks/useTimer";
+import { PieceType } from "@/types/gameTypes";
 
 export default function ReplayGamePage() {
     const { gameOwner } = useLocalSearchParams();
@@ -99,7 +100,7 @@ export default function ReplayGamePage() {
   // grille de jeux
   const grid = useRef<GridCell[][]>(useBlankGrid(GRID_SIZE, cellSize, gap));
   // Valeurs de la pièce active
-  const piece = useSharedValue<Piece>(getRandomPiece());
+  const piece = useSharedValue<Piece>(getVoidPiece());
   // x de la pièce active 
   const x = useSharedValue(0);
   // y de la pièce active
@@ -122,6 +123,7 @@ export default function ReplayGamePage() {
           try {
               const api = await useApi();
               const response = await api.get(`/game/replay/${gameOwner}`);
+              console.log("response", response.data);
               setGame(response.data);
           } catch (error) {
               router.back();
@@ -142,7 +144,7 @@ export default function ReplayGamePage() {
       for (let i = 0; i < 4; i++) {
         for (let j = 0; j < 4; j++) {
           if (piece.value.shape.length > i && piece.value.shape[i].length > j && piece.value.shape[i][j]) {
-            CellPiece.current[i][j].color.value = CELLS_COLOR[piece.value.color as keyof typeof CELLS_COLOR];
+            CellPiece.current[i][j].color.value = CELLS_COLOR[getColorFromPieceType(piece.value.piece_type) as keyof typeof CELLS_COLOR];
             CellPiece.current[i][j].opacity.value = 1;
             CellPiece.current[i][j].x.value = y.value*cellSize+gap/2 + j*cellSize;
             CellPiece.current[i][j].y.value = x.value*cellSize+gap/2 + i*cellSize;
@@ -153,7 +155,7 @@ export default function ReplayGamePage() {
         }
       }
       ghostX.value = getGhostX(piece.value, grid.current, x.value, y.value);
-      placePiece({...piece.value, color: "white"}, grid.current, ghostX.value, y.value, "stroke");
+      placePiece({...piece.value, piece_type: PieceType.White}, grid.current, ghostX.value, y.value, "stroke");
       index.value = index.value + 1;
     }
 
@@ -175,13 +177,13 @@ export default function ReplayGamePage() {
     // si le timestamp est supérieur au temps écoulé depuis le début du jeu, on execute le ou les actions
     while (index.value < game.game_actions.length && frame.timeSinceFirstFrame > game.game_actions[index.value].timestamp) {
       timestamp.value = game.game_actions[index.value].timestamp;
-      placePiece({...piece.value, color: "gray"}, grid.current, ghostX.value, y.value, "stroke");
+      placePiece({...piece.value, piece_type: PieceType.Gray}, grid.current, ghostX.value, y.value, "stroke");
       switch (game.game_actions[index.value].action_type) {
-        case ActionType.end:
+        case ActionType.End:
           gameOver.value = true;
           runOnJS(setGameOverVisible)(true);
           return;
-        case ActionType.fall:
+        case ActionType.Fall:
           x.value = x.value + 1;
           for (let i = 0; i < 4; i++) {
             for (let j = 0; j < 4; j++) {
@@ -189,19 +191,19 @@ export default function ReplayGamePage() {
             }
           }
           break;
-        case ActionType.hardDrop:
+        case ActionType.HardDrop:
           const diff = ghostX.value - x.value;
             if (diff > 0) {
               add2Score(diff*(level.value*10));
             }
           break;
-        case ActionType.rotate:
+        case ActionType.Rotate:
           const newPiece = rotatePiece(piece.value);
           piece.value = newPiece;
           for (let i = 0; i < 4; i++) {
             for (let j = 0; j < 4; j++) {
               if (piece.value.shape.length > i && piece.value.shape[i].length > j && piece.value.shape[i][j]) {
-                CellPiece.current[i][j].color.value = CELLS_COLOR[newPiece.color as keyof typeof CELLS_COLOR];
+                CellPiece.current[i][j].color.value = CELLS_COLOR[getColorFromPieceType(newPiece.piece_type) as keyof typeof CELLS_COLOR];
                 CellPiece.current[i][j].opacity.value = 1;
                 CellPiece.current[i][j].x.value = y.value*cellSize+gap/2 + j*cellSize;
                 CellPiece.current[i][j].y.value = x.value*cellSize+gap/2 + i*cellSize;
@@ -212,17 +214,17 @@ export default function ReplayGamePage() {
             }
           }
           break;
-        case ActionType.left:
+        case ActionType.Left:
           movePieceTo(CellPiece.current, "left", cellSize);
           y.value = y.value - 1;
           break;
-        case ActionType.right:
+        case ActionType.Right:
           movePieceTo(CellPiece.current, "right", cellSize);
           y.value = y.value + 1;
           break;
-        case ActionType.changePiece:
-          if (game.game_actions[index.value-1].action_type === ActionType.hardDrop) {
-            placeAndAnimateCellForHardFall(grid.current, piece.value, x.value, y.value, ghostX.value, cellSize, gap, level.value);
+        case ActionType.Piece:
+          if (game.game_actions[index.value-1].action_type === ActionType.HardDrop) {
+            placeAndAnimateCellForHardFall(grid.current, piece.value.shape, getColorFromPieceType(piece.value.piece_type), x.value, y.value, ghostX.value, cellSize, gap, level.value);
           }
           else {
             placePiece(piece.value, grid.current, ghostX.value, y.value, "fill");
@@ -235,7 +237,7 @@ export default function ReplayGamePage() {
           for (let i = 0; i < 4; i++) {
             for (let j = 0; j < 4; j++) {
               if (changedPiece.shape.length > i && changedPiece.shape[i].length > j && changedPiece.shape[i][j]) {
-                CellPiece.current[i][j].color.value = CELLS_COLOR[changedPiece.color as keyof typeof CELLS_COLOR];
+                CellPiece.current[i][j].color.value = CELLS_COLOR[getColorFromPieceType(changedPiece.piece_type) as keyof typeof CELLS_COLOR];
                 CellPiece.current[i][j].opacity.value = 1;
                 CellPiece.current[i][j].x.value = y.value*cellSize+gap/2 + j*cellSize;
                 CellPiece.current[i][j].y.value = x.value*cellSize+gap/2 + i*cellSize;
@@ -253,7 +255,7 @@ export default function ReplayGamePage() {
       // on replace le fantôme de la pièce active une fois une action executée
       // placé ici pour une meilleur lisibilité du code et moins de redondance
       ghostX.value = getGhostX(piece.value, grid.current, x.value, y.value);
-      placePiece({...piece.value, color: "white"}, grid.current, ghostX.value, y.value, "stroke");
+      placePiece({...piece.value, piece_type: PieceType.White}, grid.current, ghostX.value, y.value, "stroke");
       index.value = index.value + 1;
     }
     

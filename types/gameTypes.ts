@@ -28,6 +28,8 @@ export enum PieceType {
     Green = 0x05,
     Red = 0x06,
     Empty = 0x07,
+    Gray = 0x08,
+    White = 0x09,
 }
 
 export type Action = {
@@ -46,29 +48,18 @@ export enum ClientActionType {
     left = 0x01,
     rotate = 0x02,
     hardDrop = 0x03,
+    fall = 0x04,
 }
 
 export enum ActionType {
-    start = 0x00,
-    rotate = 0x01,
-    right = 0x02,
-    left = 0x03,
-    fall = 0x04,
-    hardDrop = 0x05,
-    changePiece = 0x06,
-    end = 0x07,
-    ping = 0xFF,
-}
-
-export enum PieceType {
-    cyan = 0x00,
-    blue = 0x01,
-    yellow = 0x02,
-    orange = 0x03,
-    purple = 0x04,
-    green = 0x05,
-    red = 0x06,
-    void = 0x07,
+    Fall = 0x00,
+    Piece = 0x01,
+    Rotate = 0x02,
+    Right = 0x03,
+    Left = 0x04,
+    HardDrop = 0x05,
+    Start = 0x06,
+    End = 0x07,
 }
 
 export type Game = {
