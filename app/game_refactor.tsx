@@ -88,15 +88,6 @@ const styles = StyleSheet.create({
 }); 
 
 export default function GamePage() {
-  const params = useLocalSearchParams();
-  
-  // User comme state pour pouvoir le modifier
-  const [user, setUser] = useState<User>({
-    name: params.userName as string,
-    best_score: parseInt(params.userBestScore as string),
-    highest_level: parseInt(params.userHighestLevel as string),
-    number_of_games: parseInt(params.userNumberOfGames as string)
-  });
 
   const {fontSize, font, score, level, lines, xLevel, xScore, xLines, xValueLevel, xValueScore, xValueLines, levelText, scoreText, linesText, add2Score, add2Level, add2Lines} = useScore();
 
@@ -106,8 +97,6 @@ export default function GamePage() {
   const cellSize = DIMENSIONS.WIDTH * 0.8 * 0.98 / 10;
   // gap entre deux cellules
   const gap = 3;
-  // delai pour modifiable pour pouvoir gérer facilement des délais ( celui de départ, celui de changement de pièce )
-  const delay = useSharedValue(3000);
   // Queue d'actions à effectuer
   const actionQueue = useSharedValue<ClientActionType[]>([]);
   // Grille de jeu avec des sharedValues pour gérer les couleurs si c'est une cellule fill ou stroke
@@ -178,6 +167,9 @@ export default function GamePage() {
           piece.value = startingState.current_piece;
           nextPiece.value = startingState.next_piece;
           replacePiece(startingState.current_piece);
+          const gx = getGhostX(startingState.current_piece, grid.current, startingState.x, startingState.y);
+          ghostX.value = gx;
+          placePiece({...startingState.current_piece, piece_type: PieceType.White}, grid.current, gx, startingState.y, "stroke");
           startGameLoop();
           break;
         case "State":
@@ -296,6 +288,8 @@ export default function GamePage() {
       processActions(actions[i].action_type, false);
     }
     replacePiece(piece.value);
+    ghostX.value = getGhostX(piece.value, grid.current, x.value, y.value);
+    placePiece({...piece.value, piece_type: PieceType.White}, grid.current, ghostX.value, y.value, "stroke");
   }
 
   const processActions = (action: ClientActionType, send : boolean) => {
@@ -340,8 +334,7 @@ export default function GamePage() {
           if (diff > 0) {
             add2Score(diff*(level.value*10));
           }
-          const color = CELLS_COLOR[getColorFromPieceType(piece.value.piece_type) as keyof typeof CELLS_COLOR];
-          placeAndAnimateCellForHardFall(grid.current, piece.value.shape, color, x.value, y.value, ghostX, cellSize, gap, level.value);
+          placeAndAnimateCellForHardFall(grid.current, piece.value, x.value, y.value, ghostX, cellSize, gap, level.value);
           deleteCompleteLines(grid.current, {score: score.value, level: level.value, lines: lines.value, add2Score: add2Score, add2Level: add2Level, add2Lines: add2Lines}, cellSize, gap);
           if (send) {
             runOnJS(sendActionOnWebSocket)({action_type: ClientActionType.hardDrop, id: ActionId.value});
@@ -448,10 +441,13 @@ export default function GamePage() {
     }
     if (actionQueue.value.length > 0) {
       const actions = actionQueue.value.splice(0);
+      placePiece({...piece.value, piece_type: PieceType.Gray}, grid.current, ghostX.value, y.value, "stroke");
       for (let i = 0; i < actions.length; i++) {
         processActions(actions[i], true);
       }
       replacePiece(piece.value);
+      ghostX.value = getGhostX(piece.value, grid.current, x.value, y.value);
+      placePiece({...piece.value, piece_type: PieceType.White}, grid.current, ghostX.value, y.value, "stroke");
     }
   });
 

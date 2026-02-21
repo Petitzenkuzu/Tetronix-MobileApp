@@ -13,6 +13,34 @@ export const getVoidPiece = () : Piece => {
   return {shape: [[false], [false], [false], [false]], piece_type: PieceType.Empty};
 };
 
+export const getColorFromPieceType = (pieceType: PieceType) : string => {
+  "worklet";
+  switch (pieceType) {
+    case PieceType.Cyan:
+      return "cyan";
+    case PieceType.Blue:
+      return "blue";
+    case PieceType.Yellow:
+      return "yellow";
+    case PieceType.Orange:
+      return "orange";
+    case PieceType.Purple:
+      return "purple";
+    case PieceType.Green:
+      return "green";
+    case PieceType.Red:
+      return "red";
+    case PieceType.Empty:
+      return "gray";
+    case PieceType.White:
+      return "white";
+    case PieceType.Gray:
+      return "gray";
+    default:
+      return "gray";
+  }
+}
+
 
 /**
  * fonction pour placer la pièce sur la grille
@@ -125,11 +153,12 @@ export const getGhostX = (piece: Piece, grid: GridCell[][], x: number, y: number
  * @param gap : espace entre deux cellules
  * @description you must pass the shape and the color of the piece to place the cell for the hard fall cause if you give directly the piece and try to get the color it will crash for no reason
  */
-export const placeAndAnimateCellForHardFall = (grid : GridCell[][],shape : boolean[][], color : string, x : number, y : number, ghostX : number, cellSize : number, gap : number, level : number) => {
+export const placeAndAnimateCellForHardFall = (grid : GridCell[][],piece : Piece, x : number, y : number, ghostX : number, cellSize : number, gap : number, level : number) => {
   "worklet";
-  for (let i = 0; i < shape.length; i++) {
-    for (let j = 0; j < shape[i].length; j++) {
-      if (shape[i][j]) {
+  const color = CELLS_COLOR[getColorFromPieceType(piece.piece_type) as keyof typeof CELLS_COLOR];
+  for (let i = 0; i < piece.shape.length; i++) {
+    for (let j = 0; j < piece.shape[i].length; j++) {
+      if (piece.shape[i][j]) {
         grid[ghostX + i][y + j].color.value = color;
         grid[ghostX + i][y + j].style.value = "fill";
         grid[ghostX + i][y + j].blur.value = 20;
@@ -217,34 +246,6 @@ export const deleteCompleteLines = (grid: GridCell[][], scoreManager: scoreManag
   }
   scoreManager.add2Lines(completedLines);
   return;
-}
-
-export const getColorFromPieceType = (pieceType: PieceType) : string => {
-  "worklet";
-  switch (pieceType) {
-    case PieceType.Cyan:
-      return "cyan";
-    case PieceType.Blue:
-      return "blue";
-    case PieceType.Yellow:
-      return "yellow";
-    case PieceType.Orange:
-      return "orange";
-    case PieceType.Purple:
-      return "purple";
-    case PieceType.Green:
-      return "green";
-    case PieceType.Red:
-      return "red";
-    case PieceType.Empty:
-      return "gray";
-    case PieceType.White:
-      return "white";
-    case PieceType.Gray:
-      return "gray";
-    default:
-      return "gray";
-  }
 }
 
 export const isDifferentGrid = (grid1: PieceType[][], grid2: GridCell[][]) : boolean => {
