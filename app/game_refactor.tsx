@@ -193,6 +193,15 @@ export default function GamePage() {
           }
           uncommittedActions.value = actions;
           break;
+        case "MissingAction":
+          let missingAction = Number.parseInt(msg.data);
+          console.log("Missing action: ", missingAction);
+          for (let i = 0; i < uncommittedActions.value.length; i++) {
+            if (uncommittedActions.value[i].id >= missingAction) {
+              sendActionOnWebSocket(uncommittedActions.value[i]);
+            }
+          }
+          break;
         case "End":
           let endState = JSON.parse(msg.data);
           runOnUI(replaceGrid)(endState.grid.grid);

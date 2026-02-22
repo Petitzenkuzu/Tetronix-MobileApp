@@ -224,7 +224,7 @@ export default function ReplayGamePage() {
           break;
         case ActionType.Piece:
           if (game.game_actions[index.value-1].action_type === ActionType.HardDrop) {
-            placeAndAnimateCellForHardFall(grid.current, piece.value.shape, getColorFromPieceType(piece.value.piece_type), x.value, y.value, ghostX.value, cellSize, gap, level.value);
+            placeAndAnimateCellForHardFall(grid.current, piece.value, x.value, y.value, ghostX.value, cellSize, gap, level.value);
           }
           else {
             placePiece(piece.value, grid.current, ghostX.value, y.value, "fill");
