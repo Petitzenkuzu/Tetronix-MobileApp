@@ -4,7 +4,7 @@ import { PieceType, Piece } from "@/types/gameTypes";
 export function getPieceFromType(type: PieceType ): Piece {
   "worklet";
   switch (type) {
-    case PieceType.cyan:
+    case PieceType.Cyan:
       return {
         shape: [
             [false, true, false, false],
@@ -12,62 +12,62 @@ export function getPieceFromType(type: PieceType ): Piece {
             [false, true, false, false],
             [false, true, false, false]
         ],
-        color: "cyan"
+        piece_type: PieceType.Cyan
     };
-    case PieceType.blue:
+    case PieceType.Blue:
       return {
         shape: [
           [false, true, false],
           [false, true, false],
           [false, true, true]
         ],
-        color: "blue"
+        piece_type: PieceType.Blue
       };
-    case PieceType.yellow:
+    case PieceType.Yellow:
       return {
         shape: [
           [true, true],
           [true, true]
         ],
-        color: "yellow"
+        piece_type: PieceType.Yellow
       };
-    case PieceType.orange:
+    case PieceType.Orange:
       return {
         shape: [
           [false, true, false],
           [false, true, false],
           [true, true, false]
         ],
-        color: "orange"
+        piece_type: PieceType.Orange
       };
-    case PieceType.purple:
+    case PieceType.Purple:
       return {
         shape: [
           [false, true, false],
           [true, true, true],
           [false, false, false]
         ],
-        color: "purple"
+        piece_type: PieceType.Purple
       };
-    case PieceType.green:
+    case PieceType.Green:
       return {
         shape: [
           [true, true, false],
           [false, true, true],
           [false, false, false]
         ],
-        color: "green"
+        piece_type: PieceType.Green
       };
-    case PieceType.red:
+    case PieceType.Red:
       return {
         shape: [
           [false, true, true],
           [true, true, false],
           [false, false, false]
         ],
-        color: "red"
+        piece_type: PieceType.Red
       };
     default:
-      return { shape: [], color: "gray" };
+      return { shape: [], piece_type: PieceType.Empty };
   }
 }
