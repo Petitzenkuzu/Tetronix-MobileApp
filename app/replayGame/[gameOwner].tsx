@@ -1,6 +1,6 @@
 import { View, Text as RNText, ImageBackground, Pressable, Modal, StyleSheet } from "react-native";
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { useLocalSearchParams, useRouter } from "expo-router";
+import { router, useLocalSearchParams, useRouter } from "expo-router";
 import { Piece } from "@/types/gameTypes";
 import { Game } from "@/types/gameTypes";
 import { Image } from "expo-image";
@@ -14,12 +14,13 @@ import { runOnUI, runOnJS } from "react-native-reanimated";
 import { DIMENSIONS } from "@/Constants/dimensions";
 import { GRID_SIZE } from "@/Constants/grid";
 import { CELLS_COLOR } from "@/Constants/cellsColor";
-import { deleteCompleteLines, getGhostX, getRandomPiece, placePiece, rotatePiece, placeAndAnimateCellForHardFall, movePieceTo } from "@/utils/gameUtils";
+import { deleteCompleteLines, getGhostX, getVoidPiece, placePiece, rotatePiece, placeAndAnimateCellForHardFall, movePieceTo, getColorFromPieceType } from "@/utils/gameUtils";
 import { useBlankGrid, useTransparentPiece, useScore } from "@/utils/gameHooks";
 import { GridCell, ActivePieceCell } from "@/types/gameTypes";
 import { ActionType } from "@/types/gameTypes";
 import { getPieceFromType } from "@/utils/replayUtils";
 import { useTimer } from "@/hooks/useTimer";
+import { PieceType } from "@/types/gameTypes";
 
 export default function ReplayGamePage() {
     const { gameOwner } = useLocalSearchParams();
@@ -99,7 +100,7 @@ export default function ReplayGamePage() {
   // grille de jeux
   const grid = useRef<GridCell[][]>(useBlankGrid(GRID_SIZE, cellSize, gap));
   // Valeurs de la pièce active
-  const piece = useSharedValue<Piece>(getRandomPiece());
+  const piece = useSharedValue<Piece>(getVoidPiece());
   // x de la pièce active 
   const x = useSharedValue(0);
   // y de la pièce active
@@ -120,15 +121,33 @@ export default function ReplayGamePage() {
   useEffect(() => {
       const fetchGame = async () => {
           try {
-              const api = await useApi();
-              const response = await api.get(`/game/replay/${gameOwner}`);
-              setGame(response.data);
+            const api = await useApi();
+            const response = await api.get(`/game/replay/${gameOwner}`);
+            setGame(response.data);
           } catch (error) {
               router.back();
           }
         }
         fetchGame();
     }, []);
+  
+  // update the visual of the current piece
+  const updatePiece = () => {
+    "worklet";
+    for (let i = 0; i < 4; i++) {
+      for (let j = 0; j < 4; j++) {
+        if (piece.value.shape.length > i && piece.value.shape[i].length > j && piece.value.shape[i][j]) {
+          CellPiece.current[i][j].color.value = CELLS_COLOR[getColorFromPieceType(piece.value.piece_type) as keyof typeof CELLS_COLOR];
+          CellPiece.current[i][j].opacity.value = 1;
+          CellPiece.current[i][j].x.value = y.value*cellSize+gap/2 + j*cellSize;
+          CellPiece.current[i][j].y.value = x.value*cellSize+gap/2 + i*cellSize;
+        }
+        else {
+          CellPiece.current[i][j].opacity.value = 0;
+        }
+      }
+    }
+  }
 
   const gameLoop = useFrameCallback((frame) => {
     "worklet";
@@ -139,24 +158,13 @@ export default function ReplayGamePage() {
     if (index.value === 0) {
       const action = game.game_actions[index.value];
       piece.value = getPieceFromType(action.piece);
-      for (let i = 0; i < 4; i++) {
-        for (let j = 0; j < 4; j++) {
-          if (piece.value.shape.length > i && piece.value.shape[i].length > j && piece.value.shape[i][j]) {
-            CellPiece.current[i][j].color.value = CELLS_COLOR[piece.value.color as keyof typeof CELLS_COLOR];
-            CellPiece.current[i][j].opacity.value = 1;
-            CellPiece.current[i][j].x.value = y.value*cellSize+gap/2 + j*cellSize;
-            CellPiece.current[i][j].y.value = x.value*cellSize+gap/2 + i*cellSize;
-          }
-          else {
-            CellPiece.current[i][j].opacity.value = 0;
-          }
-        }
-      }
+      updatePiece();
       ghostX.value = getGhostX(piece.value, grid.current, x.value, y.value);
-      placePiece({...piece.value, color: "white"}, grid.current, ghostX.value, y.value, "stroke");
+      placePiece({...piece.value, piece_type: PieceType.White}, grid.current, ghostX.value, y.value, "stroke");
       index.value = index.value + 1;
     }
 
+    // 3 secs timer at the start
     if (frame.timeSinceFirstFrame <= 4000) {
       if (frame.timeSinceFirstFrame > 3000) {
         opacity.value = withTiming(0, {duration: 500});
@@ -172,16 +180,16 @@ export default function ReplayGamePage() {
       }
     }
 
+    placePiece({...piece.value, piece_type: PieceType.Gray}, grid.current, ghostX.value, y.value, "stroke");
     // si le timestamp est supérieur au temps écoulé depuis le début du jeu, on execute le ou les actions
     while (index.value < game.game_actions.length && frame.timeSinceFirstFrame > game.game_actions[index.value].timestamp) {
       timestamp.value = game.game_actions[index.value].timestamp;
-      placePiece({...piece.value, color: "gray"}, grid.current, ghostX.value, y.value, "stroke");
       switch (game.game_actions[index.value].action_type) {
-        case ActionType.end:
+        case ActionType.End:
           gameOver.value = true;
           runOnJS(setGameOverVisible)(true);
           return;
-        case ActionType.fall:
+        case ActionType.Fall:
           x.value = x.value + 1;
           for (let i = 0; i < 4; i++) {
             for (let j = 0; j < 4; j++) {
@@ -189,79 +197,49 @@ export default function ReplayGamePage() {
             }
           }
           break;
-        case ActionType.hardDrop:
+        case ActionType.HardDrop:
           const diff = ghostX.value - x.value;
-            if (diff > 0) {
-              add2Score(diff*(level.value*10));
-            }
+          if (diff > 0) {
+            add2Score(diff*(level.value*10));
+          }
+          placeAndAnimateCellForHardFall(grid.current, piece.value, x.value, y.value, ghostX.value, cellSize, gap, level.value);
+          piece.value = getVoidPiece();
+          updatePiece();
           break;
-        case ActionType.rotate:
+        case ActionType.Rotate:
           const newPiece = rotatePiece(piece.value);
           piece.value = newPiece;
-          for (let i = 0; i < 4; i++) {
-            for (let j = 0; j < 4; j++) {
-              if (piece.value.shape.length > i && piece.value.shape[i].length > j && piece.value.shape[i][j]) {
-                CellPiece.current[i][j].color.value = CELLS_COLOR[newPiece.color as keyof typeof CELLS_COLOR];
-                CellPiece.current[i][j].opacity.value = 1;
-                CellPiece.current[i][j].x.value = y.value*cellSize+gap/2 + j*cellSize;
-                CellPiece.current[i][j].y.value = x.value*cellSize+gap/2 + i*cellSize;
-              }
-              else {
-                CellPiece.current[i][j].opacity.value = 0;
-              }
-            }
-          }
+          updatePiece();
           break;
-        case ActionType.left:
+        case ActionType.Left:
           movePieceTo(CellPiece.current, "left", cellSize);
           y.value = y.value - 1;
           break;
-        case ActionType.right:
+        case ActionType.Right:
           movePieceTo(CellPiece.current, "right", cellSize);
           y.value = y.value + 1;
           break;
-        case ActionType.changePiece:
-          if (game.game_actions[index.value-1].action_type === ActionType.hardDrop) {
-            placeAndAnimateCellForHardFall(grid.current, piece.value, x.value, y.value, ghostX.value, cellSize, gap, level.value);
-          }
-          else {
-            placePiece(piece.value, grid.current, ghostX.value, y.value, "fill");
-          }
+        case ActionType.Piece:
           deleteCompleteLines(grid.current, {level: level.value, score: score.value, lines: lines.value, add2Score: add2Score, add2Level: add2Level, add2Lines: add2Lines}, cellSize, gap);
           const changedPiece = getPieceFromType(game.game_actions[index.value].piece);
           piece.value = changedPiece;
           x.value = 0;
           y.value = 4;
-          for (let i = 0; i < 4; i++) {
-            for (let j = 0; j < 4; j++) {
-              if (changedPiece.shape.length > i && changedPiece.shape[i].length > j && changedPiece.shape[i][j]) {
-                CellPiece.current[i][j].color.value = CELLS_COLOR[changedPiece.color as keyof typeof CELLS_COLOR];
-                CellPiece.current[i][j].opacity.value = 1;
-                CellPiece.current[i][j].x.value = y.value*cellSize+gap/2 + j*cellSize;
-                CellPiece.current[i][j].y.value = x.value*cellSize+gap/2 + i*cellSize;
-              }
-              else {
-                CellPiece.current[i][j].opacity.value = 0;
-              }
-            }
-          }
+          updatePiece();
           break;
           default:
-            console.log("action non reconnue");
+            console.log("unknown action");
             break;
       }
-      // on replace le fantôme de la pièce active une fois une action executée
-      // placé ici pour une meilleur lisibilité du code et moins de redondance
-      ghostX.value = getGhostX(piece.value, grid.current, x.value, y.value);
-      placePiece({...piece.value, color: "white"}, grid.current, ghostX.value, y.value, "stroke");
       index.value = index.value + 1;
     }
+    // on replace le fantôme de la pièce active une fois une action executée
+    // placé ici pour une meilleur lisibilité du code et moins de redondance
+    ghostX.value = getGhostX(piece.value, grid.current, x.value, y.value);
+    placePiece({...piece.value, piece_type: PieceType.White}, grid.current, ghostX.value, y.value, "stroke");
     
   });
 
-  const startGameLoop = () => {
-    gameLoop.setActive(true);
-  };
   const stopGameLoop = () => {
     gameLoop.setActive(false);
   };
@@ -372,107 +350,103 @@ export default function ReplayGamePage() {
                   </Canvas>
               </View>
             </View>
-            <Modal visible={gameOverVisible} transparent={true} animationType="slide">
+            <GameModal gameOverVisible={gameOverVisible} score={score.value} level={level.value} lines={lines.value} />
+          </SafeAreaView>
+      </ImageBackground>
+    )
+}
+
+function GameModal({gameOverVisible, score, level, lines}: {gameOverVisible: boolean, score: number, level: number, lines: number}) {
+  return (
+    <Modal visible={gameOverVisible} transparent={true} animationType="slide">
               <View style={modalStyle.container}>
                 <View style={modalStyle.mainContent}>
                   <View style={modalStyle.gameOverView}>
                     <RNText style={modalStyle.gameOverText}>Game Over</RNText>
                   </View>
                   <View style={modalStyle.statsView}>
-                    <RNText style={modalStyle.statsText}>Score: {score.value}</RNText>
-                    <RNText style={modalStyle.statsText}>Level: {level.value}</RNText>
-                    <RNText style={modalStyle.statsText}>Lines: {lines.value}</RNText>
+                    <RNText style={modalStyle.statsText}>Score: {score}</RNText>
+                    <RNText style={modalStyle.statsText}>Level: {level}</RNText>
+                    <RNText style={modalStyle.statsText}>Lines: {lines}</RNText>
                   </View>
                   <View style={modalStyle.buttonsView}>
                     <Pressable style={modalStyle.buttonPressableHome} onPress={() => { 
-                      const router = useRouter();
-                      router.back();
+                      router.replace("/");
                     }}>
                       <RNText style={{color: "white", fontSize: 20, fontFamily: "Quicksand", textAlign: "center"}}>BACK TO MENU</RNText>
-                    </Pressable>
-                    <Pressable style={modalStyle.buttonPressableRestart} onPress={() => {
-                      runOnUI(() => {
-                        resetGame();
-                        runOnJS(setGameOverVisible)(false);
-                        runOnJS(startGameLoop)();
-                      })();
-                    }}>
-                      <Image source={require("@/assets/images/restart.png")} style={{height: "50%",width: "15%", tintColor: "white", aspectRatio: 1}} />
                     </Pressable>
                   </View>
                 </View>
               </View>
             </Modal>
-          </SafeAreaView>
-      </ImageBackground>
-    )
+  );
 }
 
+
 const modalStyle = StyleSheet.create({
-    container: {
-      width: "100%",
-      height: "100%",
-      justifyContent: "center",
-      alignItems: "center",
-    },
-    mainContent: {
-      width: "65%",
-      height: "40%",
-      justifyContent: "center",
-      alignItems: "center",
-      backgroundColor: "rgba(0,0,0,0.95)",
-      borderRadius: 20,
-      borderWidth: 2,
-    },
-    gameOverView: {
-      width: "100%",
-      height: "20%",
-      justifyContent: "center",
-      alignItems: "center",
-    },
-    gameOverText: {
-      color: "red",
-      fontSize: 40,
-      fontFamily: "Neoneon",
-      width: "100%",
-      height: 44,
-      textAlign: "center",
-    },
-    statsView: {
-      width: "100%",
-      height: "55%",
-      justifyContent: "center",
-      alignItems: "center",
-    },
-    statsText: {
-      color: "white",
-      fontSize: 36,
-      fontFamily: "Quicksand",
-    },
-    buttonsView: {
-      width: "100%",
-      height: "25%",
-      justifyContent: "center",
-      alignItems: "center",
-      flexDirection: "row",
-    },
-    buttonPressableHome: {
-      width: "70%",
-      height: 36,
-      justifyContent: "center",
-      alignItems: "center",
-      marginRight: "5%",
-      backgroundColor: "red",
-      borderRadius: 12,
-    },
-    buttonPressableRestart: {
-      width: 36,
-      height: 36,
-      justifyContent: "center",
-      alignItems: "center",
-      backgroundColor: "#57B9FF",
-      borderRadius: 12,
-    }
-  });
-  
-  
+  container: {
+    width: "100%",
+    height: "100%",
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  mainContent: {
+    width: "65%",
+    height: "40%",
+    justifyContent: "center",
+    alignItems: "center",
+    backgroundColor: "rgba(0,0,0,0.95)",
+    borderRadius: 20,
+    borderWidth: 2,
+  },
+  gameOverView: {
+    width: "100%",
+    height: "20%",
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  gameOverText: {
+    color: "red",
+    fontSize: 40,
+    fontFamily: "Neoneon",
+    width: "100%",
+    height: 44,
+    textAlign: "center",
+  },
+  statsView: {
+    width: "100%",
+    height: "55%",
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  statsText: {
+    color: "white",
+    fontSize: 36,
+    fontFamily: "Quicksand",
+  },
+  buttonsView: {
+    width: "100%",
+    height: "25%",
+    justifyContent: "center",
+    alignItems: "center",
+    flexDirection: "row",
+  },
+  buttonPressableHome: {
+    width: "90%",
+    height: 36,
+    justifyContent: "center",
+    alignItems: "center",
+    marginRight: "5%",
+    marginLeft: "5%",
+    backgroundColor: "red",
+    borderRadius: 12,
+  },
+  buttonPressableRestart: {
+    width: 36,
+    height: 36,
+    justifyContent: "center",
+    alignItems: "center",
+    backgroundColor: "#57B9FF",
+    borderRadius: 12,
+  }
+});

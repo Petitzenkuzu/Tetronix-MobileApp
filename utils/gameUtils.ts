@@ -1,19 +1,8 @@
 import { PIECES } from "../Constants/piece";
 import { GRID_SIZE } from "../Constants/grid";
-import { GridCell, Piece, scoreManager, ActivePieceCell } from "@/types/gameTypes";
+import { GridCell, Piece, scoreManager, ActivePieceCell, PieceType } from "@/types/gameTypes";
 import { withTiming, Easing, withSequence, withDelay, runOnJS} from "react-native-reanimated";
 import { CELLS_COLOR } from "@/Constants/cellsColor";
-
-
-/**
- * fonction pour générer une pièce aléatoire
- * @returns une pièce aléatoire
- */
-export const getRandomPiece = () : Piece => {
-  const pieceTypes = Object.keys(PIECES);
-  const randomType = pieceTypes[Math.floor(Math.random() * pieceTypes.length)];
-  return PIECES[randomType as keyof typeof PIECES]();
-};
 
 /**
  * fonction pour générer une pièce vide
@@ -21,16 +10,37 @@ export const getRandomPiece = () : Piece => {
  */
 export const getVoidPiece = () : Piece => {
   "worklet";
-  return {shape: [[false], [false], [false], [false]], color: "transparent"};
+  return {shape: [[false], [false], [false], [false]], piece_type: PieceType.Empty};
 };
 
-/**
- * fonction pour générer un ensemble de 10 pièces aléatoires
- * @returns un tableau de 10 pièces aléatoires
- */
-export const getSetOfRandomPieces = () : Piece[] => {
-  return Array(10).fill(null).map(() => getRandomPiece());
+export const getColorFromPieceType = (pieceType: PieceType) : string => {
+  "worklet";
+  switch (pieceType) {
+    case PieceType.Cyan:
+      return "cyan";
+    case PieceType.Blue:
+      return "blue";
+    case PieceType.Yellow:
+      return "yellow";
+    case PieceType.Orange:
+      return "orange";
+    case PieceType.Purple:
+      return "purple";
+    case PieceType.Green:
+      return "green";
+    case PieceType.Red:
+      return "red";
+    case PieceType.Empty:
+      return "gray";
+    case PieceType.White:
+      return "white";
+    case PieceType.Gray:
+      return "gray";
+    default:
+      return "gray";
+  }
 }
+
 
 /**
  * fonction pour placer la pièce sur la grille
@@ -45,7 +55,7 @@ export const placePiece = (piece : Piece, grid: GridCell[][], x: number, y: numb
   for (let i = 0; i < piece.shape.length; i++) {
     for (let j = 0; j < piece.shape[i].length; j++) {
       if (piece.shape[i][j]) {
-        grid[x + i][y + j].color.value = CELLS_COLOR[piece.color as keyof typeof CELLS_COLOR];
+        grid[x + i][y + j].color.value = CELLS_COLOR[getColorFromPieceType(piece.piece_type) as keyof typeof CELLS_COLOR];
         grid[x + i][y + j].style.value = style;
       }
     }
@@ -87,7 +97,7 @@ export const movePieceTo = (CellPiece: ActivePieceCell[][], direction: "left" | 
  */
 export const rotatePiece = (piece: Piece) : Piece => {
   "worklet";
-  return {shape: piece.shape.map((row, index) => row.map((_, j) => piece.shape[piece.shape.length - j - 1][index])), color: piece.color};
+  return {shape: piece.shape.map((row, index) => row.map((_, j) => piece.shape[piece.shape.length - j - 1][index])), piece_type: piece.piece_type};
 };
 
 /**
@@ -141,13 +151,15 @@ export const getGhostX = (piece: Piece, grid: GridCell[][], x: number, y: number
  * @param ghostX : position x du ghost
  * @param cellSize : taille d'une cellule
  * @param gap : espace entre deux cellules
+ * @description you must pass the shape and the color of the piece to place the cell for the hard fall cause if you give directly the piece and try to get the color it will crash for no reason
  */
 export const placeAndAnimateCellForHardFall = (grid : GridCell[][],piece : Piece, x : number, y : number, ghostX : number, cellSize : number, gap : number, level : number) => {
   "worklet";
+  const color = CELLS_COLOR[getColorFromPieceType(piece.piece_type) as keyof typeof CELLS_COLOR];
   for (let i = 0; i < piece.shape.length; i++) {
     for (let j = 0; j < piece.shape[i].length; j++) {
       if (piece.shape[i][j]) {
-        grid[ghostX + i][y + j].color.value = CELLS_COLOR[piece.color as keyof typeof CELLS_COLOR];
+        grid[ghostX + i][y + j].color.value = color;
         grid[ghostX + i][y + j].style.value = "fill";
         grid[ghostX + i][y + j].blur.value = 20;
         grid[ghostX + i][y + j].y.value = x*cellSize+gap/2;
@@ -236,4 +248,29 @@ export const deleteCompleteLines = (grid: GridCell[][], scoreManager: scoreManag
   return;
 }
 
+export const isDifferentGrid = (grid1: PieceType[][], grid2: GridCell[][]) : boolean => {
+  "worklet";
+  for (let i = 0; i < grid1.length; i++) {
+    for (let j = 0; j < grid1[i].length; j++) {
+      if (CELLS_COLOR[getColorFromPieceType(grid1[i][j]) as keyof typeof CELLS_COLOR] !== grid2[i][j].color.value) {
+        return true;
+      }
+    }
+  }
+  return false;
+}
 
+export const isDifferentShape = (shape1: boolean[][], shape2: boolean[][]) : boolean => {
+  "worklet";
+  if (shape1.length !== shape2.length) {
+    return true;
+  }
+  for (let i = 0; i < shape1.length; i++) {
+    for (let j = 0; j < shape1[i].length; j++) {
+      if (shape1[i][j] !== shape2[i][j]) {
+        return true;
+      }
+    }
+  }
+  return false;
+}
