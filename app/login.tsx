@@ -46,7 +46,8 @@ async function login(params: string){
       const {code} = response.params;
       const params = new URLSearchParams({
         code : code,
-        redirect_uri : makeRedirectUri({scheme :"tetronix"})
+        redirect_uri : makeRedirectUri({scheme :"tetronix"}),
+        code_verifier : request?.codeVerifier ?? ""
       });
       login(params.toString());
     }
